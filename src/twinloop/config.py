@@ -1,0 +1,77 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Union
+
+import yaml
+from pydantic import BaseModel, Field
+
+
+class SimConfig(BaseModel):
+    tick_seconds: float = 1.0
+    episode_ticks: int = 300
+    queue_cap: int = 128
+    default_cpu_capacity: float = 100.0
+    default_mem_capacity: float = 100.0
+    default_link_bandwidth: float = 1000.0
+    default_base_latency_ms: float = 5.0
+
+
+class TopologyConfig(BaseModel):
+    n_gateways: int = 1
+    n_edge_servers: int = 4
+    n_devices: int = 12
+    n_services: int = 6
+    edge_cpu_capacity: float = 100.0
+    edge_mem_capacity: float = 100.0
+    device_cpu_capacity: float = 10.0
+    device_mem_capacity: float = 10.0
+
+
+class FaultConfig(BaseModel):
+    faults_per_episode: int = 3
+    min_start_tick: int = 20
+    max_start_tick: int = 260
+    min_duration: int = 20
+    max_duration: int = 80
+    min_magnitude: float = 1.5
+    max_magnitude: float = 4.0
+
+
+class TwinConfig(BaseModel):
+    fidelity: float = 1.0
+    sigma_obs: float = 0.0
+    lag_ticks: int = 0
+    simplify_queueing: bool = False
+    drift_pct: float = 0.0
+    forecast_err: float = 0.0
+    horizon_ticks: int = 30
+    tolerance_margin: float = 0.0
+
+
+class AgentConfig(BaseModel):
+    agent_type: str = "null"
+    prompt_version: str = "v0"
+    temperature: float = 0.0
+    retry_cap: int = 2
+
+
+class ExperimentConfig(BaseModel):
+    name: str = "default"
+    seeds: list[int] = Field(default_factory=lambda: list(range(30)))
+    arms: list[str] = Field(default_factory=lambda: ["A0", "A1", "A2", "A3", "A4", "A5"])
+    fidelity_levels: list[float] = Field(
+        default_factory=lambda: [0.0, 0.25, 0.5, 0.75, 1.0]
+    )
+    timeout_seconds: float = 60.0
+    sim: SimConfig = Field(default_factory=SimConfig)
+    topology: TopologyConfig = Field(default_factory=TopologyConfig)
+    fault: FaultConfig = Field(default_factory=FaultConfig)
+    twin: TwinConfig = Field(default_factory=TwinConfig)
+    agent: AgentConfig = Field(default_factory=AgentConfig)
+
+
+def load_config(path: Union[str, Path]) -> ExperimentConfig:
+    text = Path(path).read_text(encoding="utf-8")
+    data = yaml.safe_load(text) or {}
+    return ExperimentConfig.model_validate(data)

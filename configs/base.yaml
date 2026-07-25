@@ -1,0 +1,49 @@
+name: base
+seeds: [0, 1, 2, 3, 4]
+arms: [A0, A1, A2, A3, A4, A5]
+fidelity_levels: [0.0, 0.25, 0.5, 0.75, 1.0]
+timeout_seconds: 60.0
+
+sim:
+  tick_seconds: 1.0
+  episode_ticks: 300
+  queue_cap: 128
+  default_cpu_capacity: 100.0
+  default_mem_capacity: 100.0
+  default_link_bandwidth: 1000.0
+  default_base_latency_ms: 5.0
+
+topology:
+  n_gateways: 1
+  n_edge_servers: 4
+  n_devices: 12
+  n_services: 6
+  edge_cpu_capacity: 100.0
+  edge_mem_capacity: 100.0
+  device_cpu_capacity: 10.0
+  device_mem_capacity: 10.0
+
+fault:
+  faults_per_episode: 3
+  min_start_tick: 20
+  max_start_tick: 260
+  min_duration: 20
+  max_duration: 80
+  min_magnitude: 1.5
+  max_magnitude: 4.0
+
+twin:
+  fidelity: 1.0
+  sigma_obs: 0.0
+  lag_ticks: 0
+  simplify_queueing: false
+  drift_pct: 0.0
+  forecast_err: 0.0
+  horizon_ticks: 30
+  tolerance_margin: 0.0
+
+agent:
+  agent_type: "null"
+  prompt_version: v0
+  temperature: 0.0
+  retry_cap: 2
