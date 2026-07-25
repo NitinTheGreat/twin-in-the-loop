@@ -13,3 +13,4 @@ class SimState:
     nodes: dict[str, Node] = field(default_factory=dict)
     links: dict[str, Link] = field(default_factory=dict)
     services: dict[str, Service] = field(default_factory=dict)
+    rng_states: dict[str, dict] = field(default_factory=dict)

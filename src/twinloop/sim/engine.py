@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 
 import numpy as np
+from numpy.random import Generator, PCG64
 
 from ..config import SimConfig, TopologyConfig
 from ..seeding import SeedManager
@@ -12,6 +14,44 @@ from .node import Node
 from .service import Request, Service, process_queue
 from .state import SimState
 from .workload import PoissonWorkload, Workload
+
+
+def _copy_request(request: Request) -> Request:
+    return Request(
+        arrival_time=request.arrival_time,
+        network_delay=request.network_delay,
+        work=request.work,
+    )
+
+
+def _copy_service(service: Service) -> Service:
+    return Service(
+        id=service.id,
+        host_node_id=service.host_node_id,
+        cpu_demand_per_req=service.cpu_demand_per_req,
+        mem_footprint=service.mem_footprint,
+        replicas=service.replicas,
+        queue=[_copy_request(r) for r in service.queue],
+        status=service.status,
+        in_service=_copy_request(service.in_service)
+        if service.in_service is not None
+        else None,
+    )
+
+
+def _copy_entities(state: SimState) -> SimState:
+    return SimState(
+        tick=state.tick,
+        nodes={nid: Node(**vars(n)) for nid, n in state.nodes.items()},
+        links={lid: Link(**vars(l)) for lid, l in state.links.items()},
+        services={sid: _copy_service(s) for sid, s in state.services.items()},
+    )
+
+
+def _clone_generator(generator: Generator) -> Generator:
+    clone = Generator(PCG64())
+    clone.bit_generator.state = copy.deepcopy(generator.bit_generator.state)
+    return clone
 
 
 @dataclass
@@ -230,3 +270,50 @@ class NetworkSim:
 
         self.state.tick += 1
         return metrics
+
+    def _iter_streams(self):
+        for sid, generator in self._arrival_streams.items():
+            yield f"arrival::{sid}", generator
+        for sid, generator in self._service_streams.items():
+            yield f"service::{sid}", generator
+        yield "routing", self._routing_stream
+
+    def _capture_rng(self) -> dict[str, dict]:
+        return {
+            key: copy.deepcopy(generator.bit_generator.state)
+            for key, generator in self._iter_streams()
+        }
+
+    def _apply_rng(self, states: dict[str, dict]) -> None:
+        for key, generator in self._iter_streams():
+            generator.bit_generator.state = copy.deepcopy(states[key])
+
+    def snapshot(self) -> SimState:
+        captured = _copy_entities(self.state)
+        captured.rng_states = self._capture_rng()
+        return captured
+
+    def restore(self, state: SimState) -> None:
+        self.state = _copy_entities(state)
+        self._apply_rng(state.rng_states)
+
+    def fork(self) -> "NetworkSim":
+        label = f"fork::tick={self.state.tick}"
+        child = NetworkSim.__new__(NetworkSim)
+        child.config = self.config
+        child.topology = self.topology
+        child.seed_manager = self.seed_manager.child(label)
+        child.state = _copy_entities(self.state)
+        child._routes = self.topology.routes
+        child._workloads = self.topology.workloads
+        child._allocated = dict(self._allocated)
+        child._arrival_streams = {
+            sid: _clone_generator(generator)
+            for sid, generator in self._arrival_streams.items()
+        }
+        child._service_streams = {
+            sid: _clone_generator(generator)
+            for sid, generator in self._service_streams.items()
+        }
+        child._routing_stream = _clone_generator(self._routing_stream)
+        return child
