@@ -9,6 +9,8 @@ class Workload(Protocol):
 
     def mean_rate(self) -> float: ...
 
+    def copy(self) -> "Workload": ...
+
 
 @dataclass
 class PoissonWorkload:
@@ -19,3 +21,6 @@ class PoissonWorkload:
 
     def mean_rate(self) -> float:
         return self.rate
+
+    def copy(self) -> "PoissonWorkload":
+        return PoissonWorkload(rate=self.rate)

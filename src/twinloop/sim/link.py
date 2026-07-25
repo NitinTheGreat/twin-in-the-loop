@@ -11,4 +11,5 @@ class Link:
     base_latency_ms: float
     current_latency_ms: float
     loss_rate: float = 0.0
+    latency_multiplier: float = 1.0
     status: str = "up"

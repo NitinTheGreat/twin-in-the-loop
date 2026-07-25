@@ -105,6 +105,21 @@ def test_fork_queue_contents_distinct_instances():
     )
 
 
+def test_fork_workload_mutation_isolation():
+    control = _fresh()
+    _run(control, 50)
+    control_seq = _run(control, 100)
+
+    sim = _fresh()
+    _run(sim, 50)
+    child = sim.fork()
+    child.state.workloads["svc0"].rate *= 8.0
+    _run(child, 100)
+
+    parent_seq = _run(sim, 100)
+    assert parent_seq == control_seq
+
+
 def test_fork_benchmark():
     sim = _fresh()
     _run(sim, 50)
