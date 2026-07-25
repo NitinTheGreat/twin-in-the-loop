@@ -1,0 +1,8 @@
+n_gateways: 1
+n_edge_servers: 4
+n_devices: 12
+n_services: 6
+edge_cpu_capacity: 100.0
+edge_mem_capacity: 100.0
+device_cpu_capacity: 10.0
+device_mem_capacity: 10.0
