@@ -21,3 +21,11 @@ tests/test_fork.py -q -s
 
 uv run python 
 scripts/lab1_network_demo.py
+
+To test frontends:
+
+## Demo 1:
+```
+streamlit run demo/review1_app.py
+```
+
