@@ -11,4 +11,5 @@ class Node:
     mem_capacity: float
     cpu_used: float = 0.0
     mem_used: float = 0.0
+    cpu_reserved: float = 0.0
     status: str = "healthy"

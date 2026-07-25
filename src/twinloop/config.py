@@ -49,6 +49,15 @@ class TwinConfig(BaseModel):
     tolerance_margin: float = 0.0
 
 
+class SLOConfig(BaseModel):
+    p95_target_ms: float = 600.0
+    availability_target: float = 0.99
+    at_risk_fraction: float = 0.85
+    history_window: int = 10
+    summary_char_budget: int = 6000
+    chars_per_token: float = 4.0
+
+
 class AgentConfig(BaseModel):
     agent_type: str = "null"
     prompt_version: str = "v0"
@@ -69,6 +78,7 @@ class ExperimentConfig(BaseModel):
     fault: FaultConfig = Field(default_factory=FaultConfig)
     twin: TwinConfig = Field(default_factory=TwinConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
+    slo: SLOConfig = Field(default_factory=SLOConfig)
 
 
 def load_config(path: Union[str, Path]) -> ExperimentConfig:

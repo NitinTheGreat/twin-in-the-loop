@@ -7,6 +7,7 @@ import numpy as np
 from numpy.random import Generator, PCG64
 
 from ..config import SimConfig, TopologyConfig
+from ..faults.injector import FaultInjector
 from ..seeding import SeedManager
 from .link import Link
 from .metrics import TickMetrics
@@ -45,6 +46,9 @@ def _copy_entities(state: SimState) -> SimState:
         nodes={nid: Node(**vars(n)) for nid, n in state.nodes.items()},
         links={lid: Link(**vars(l)) for lid, l in state.links.items()},
         services={sid: _copy_service(s) for sid, s in state.services.items()},
+        routes={sid: list(path) for sid, path in state.routes.items()},
+        workloads={sid: w.copy() for sid, w in state.workloads.items()},
+        active_faults={i: dict(saved) for i, saved in state.active_faults.items()},
     )
 
 
@@ -150,7 +154,13 @@ def build_topology(
 
 
 class NetworkSim:
-    def __init__(self, topology: Topology, config: SimConfig, seed: int) -> None:
+    def __init__(
+        self,
+        topology: Topology,
+        config: SimConfig,
+        seed: int,
+        schedule=None,
+    ) -> None:
         self.config = config
         self.topology = topology
         self.seed_manager = SeedManager(seed)
@@ -167,19 +177,24 @@ class NetworkSim:
             )
             for s in topology.services
         }
-        self.state = SimState(tick=0, nodes=nodes, links=links, services=services)
+        routes = {sid: list(path) for sid, path in topology.routes.items()}
+        workloads = {sid: w.copy() for sid, w in topology.workloads.items()}
+        self.state = SimState(
+            tick=0,
+            nodes=nodes,
+            links=links,
+            services=services,
+            routes=routes,
+            workloads=workloads,
+        )
 
-        self._routes = topology.routes
-        self._workloads = topology.workloads
+        self._injector = FaultInjector(schedule) if schedule is not None else None
 
-        counts: dict[str, int] = {}
+        self._service_counts: dict[str, int] = {}
         for service in services.values():
-            counts[service.host_node_id] = counts.get(service.host_node_id, 0) + 1
-        self._allocated = {
-            service.id: nodes[service.host_node_id].cpu_capacity
-            / counts[service.host_node_id]
-            for service in services.values()
-        }
+            self._service_counts[service.host_node_id] = (
+                self._service_counts.get(service.host_node_id, 0) + 1
+            )
 
         self._arrival_streams = {
             sid: self.seed_manager.stream(f"workload::{sid}") for sid in services
@@ -189,11 +204,18 @@ class NetworkSim:
         }
         self._routing_stream = self.seed_manager.stream("routing")
 
+    def _allocated_cpu(self, service: Service) -> float:
+        node = self.state.nodes[service.host_node_id]
+        available = max(node.cpu_capacity - node.cpu_reserved, 1e-9)
+        return available / self._service_counts[service.host_node_id]
+
     def _route_delay_and_loss(self, service_id: str) -> tuple[float, float]:
         delay_ms = 0.0
         survival = 1.0
-        for link_id in self._routes.get(service_id, []):
+        for link_id in self.state.routes.get(service_id, []):
             link = self.state.links[link_id]
+            if link.status != "up":
+                return delay_ms / 1000.0, 1.0
             delay_ms += link.current_latency_ms
             survival *= 1.0 - link.loss_rate
         return delay_ms / 1000.0, 1.0 - survival
@@ -202,10 +224,13 @@ class NetworkSim:
         tau = self.config.tick_seconds
         tick_start = self.state.tick * tau
 
+        if self._injector is not None:
+            self._injector.apply_tick(self.state.tick, self.state)
+
         arrivals: dict[str, list[Request]] = {}
         arrived_counts: dict[str, int] = {}
         for sid, service in self.state.services.items():
-            count = self._workloads[sid].sample(self._arrival_streams[sid], tau)
+            count = self.state.workloads[sid].sample(self._arrival_streams[sid], tau)
             arrived_counts[sid] = count
             arrivals[sid] = [Request(arrival_time=tick_start) for _ in range(count)]
 
@@ -222,9 +247,17 @@ class NetworkSim:
         completed: dict[str, list[float]] = {}
         work_done: dict[str, float] = {}
         for sid, service in self.state.services.items():
+            node = self.state.nodes[service.host_node_id]
+            if node.status == "down" or service.status == "down":
+                dropped_counts[sid] += len(service.queue)
+                service.queue.clear()
+                service.in_service = None
+                completed[sid] = []
+                work_done[sid] = 0.0
+                continue
             responses, overflow, done = process_queue(
                 service,
-                self._allocated[sid],
+                self._allocated_cpu(service),
                 tick_start,
                 tau,
                 self.config.queue_cap,
@@ -235,7 +268,7 @@ class NetworkSim:
             work_done[sid] = done
 
         for node in self.state.nodes.values():
-            node.cpu_used = 0.0
+            node.cpu_used = node.cpu_reserved
             node.mem_used = 0.0
         for sid, service in self.state.services.items():
             node = self.state.nodes[service.host_node_id]
@@ -243,7 +276,7 @@ class NetworkSim:
             node.mem_used += service.mem_footprint * max(service.replicas, 1)
 
         for link in self.state.links.values():
-            link.current_latency_ms = link.base_latency_ms
+            link.current_latency_ms = link.base_latency_ms * link.latency_multiplier
 
         metrics = TickMetrics(tick=self.state.tick)
         for sid, service in self.state.services.items():
@@ -304,9 +337,8 @@ class NetworkSim:
         child.topology = self.topology
         child.seed_manager = self.seed_manager.child(label)
         child.state = _copy_entities(self.state)
-        child._routes = self.topology.routes
-        child._workloads = self.topology.workloads
-        child._allocated = dict(self._allocated)
+        child._injector = self._injector
+        child._service_counts = dict(self._service_counts)
         child._arrival_streams = {
             sid: _clone_generator(generator)
             for sid, generator in self._arrival_streams.items()
