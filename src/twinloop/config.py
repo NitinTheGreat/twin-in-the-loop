@@ -58,6 +58,25 @@ class SLOConfig(BaseModel):
     chars_per_token: float = 4.0
 
 
+class ActionsConfig(BaseModel):
+    migration_downtime_per_mem: float = 2.0
+    migration_min_downtime: int = 2
+    migration_transfer_cost: float = 1.0
+    restart_downtime: int = 3
+    restart_cost: float = 1.0
+    replica_cap: int = 5
+
+
+class RuleAgentConfig(BaseModel):
+    node_util_threshold: float = 0.9
+    link_latency_threshold_ms: float = 12.0
+    sustain_ticks: int = 3
+    mem_growth_window: int = 5
+    cooldown_ticks: int = 15
+    scale_delta: int = 1
+    throttle_fraction: float = 0.6
+
+
 class AgentConfig(BaseModel):
     agent_type: str = "null"
     prompt_version: str = "v0"
@@ -79,6 +98,8 @@ class ExperimentConfig(BaseModel):
     twin: TwinConfig = Field(default_factory=TwinConfig)
     agent: AgentConfig = Field(default_factory=AgentConfig)
     slo: SLOConfig = Field(default_factory=SLOConfig)
+    actions: ActionsConfig = Field(default_factory=ActionsConfig)
+    rule_agent: RuleAgentConfig = Field(default_factory=RuleAgentConfig)
 
 
 def load_config(path: Union[str, Path]) -> ExperimentConfig:

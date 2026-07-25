@@ -21,6 +21,8 @@ class Service:
     queue: list[Request] = field(default_factory=list)
     status: str = "healthy"
     in_service: Optional[Request] = None
+    baseline_mem: float = 0.0
+    rate_limit: Optional[float] = None
 
 
 def service_rate(allocated_cpu: float, replicas: int, cpu_demand_per_req: float) -> float:

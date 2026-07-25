@@ -13,7 +13,7 @@ from .link import Link
 from .metrics import TickMetrics
 from .node import Node
 from .service import Request, Service, process_queue
-from .state import SimState
+from .state import PendingEffect, SimState
 from .workload import PoissonWorkload, Workload
 
 
@@ -37,6 +37,17 @@ def _copy_service(service: Service) -> Service:
         in_service=_copy_request(service.in_service)
         if service.in_service is not None
         else None,
+        baseline_mem=service.baseline_mem,
+        rate_limit=service.rate_limit,
+    )
+
+
+def _copy_pending(effect: PendingEffect) -> PendingEffect:
+    return PendingEffect(
+        kind=effect.kind,
+        service_id=effect.service_id,
+        remaining=effect.remaining,
+        target_node_id=effect.target_node_id,
     )
 
 
@@ -49,6 +60,7 @@ def _copy_entities(state: SimState) -> SimState:
         routes={sid: list(path) for sid, path in state.routes.items()},
         workloads={sid: w.copy() for sid, w in state.workloads.items()},
         active_faults={i: dict(saved) for i, saved in state.active_faults.items()},
+        pending=[_copy_pending(e) for e in state.pending],
     )
 
 
@@ -174,6 +186,7 @@ class NetworkSim:
                 cpu_demand_per_req=s.cpu_demand_per_req,
                 mem_footprint=s.mem_footprint,
                 replicas=s.replicas,
+                baseline_mem=s.baseline_mem if s.baseline_mem > 0 else s.mem_footprint,
             )
             for s in topology.services
         }
@@ -190,12 +203,6 @@ class NetworkSim:
 
         self._injector = FaultInjector(schedule) if schedule is not None else None
 
-        self._service_counts: dict[str, int] = {}
-        for service in services.values():
-            self._service_counts[service.host_node_id] = (
-                self._service_counts.get(service.host_node_id, 0) + 1
-            )
-
         self._arrival_streams = {
             sid: self.seed_manager.stream(f"workload::{sid}") for sid in services
         }
@@ -206,8 +213,30 @@ class NetworkSim:
 
     def _allocated_cpu(self, service: Service) -> float:
         node = self.state.nodes[service.host_node_id]
+        total_replicas = sum(
+            max(s.replicas, 1)
+            for s in self.state.services.values()
+            if s.host_node_id == service.host_node_id
+        )
         available = max(node.cpu_capacity - node.cpu_reserved, 1e-9)
-        return available / self._service_counts[service.host_node_id]
+        return available / max(total_replicas, 1)
+
+    def _advance_pending_effects(self) -> None:
+        remaining: list[PendingEffect] = []
+        for effect in self.state.pending:
+            if effect.remaining <= 1:
+                service = self.state.services[effect.service_id]
+                if effect.kind == "migrate":
+                    service.host_node_id = effect.target_node_id
+                if effect.kind == "restart":
+                    service.mem_footprint = service.baseline_mem
+                service.queue.clear()
+                service.in_service = None
+                service.status = "healthy"
+            else:
+                effect.remaining -= 1
+                remaining.append(effect)
+        self.state.pending = remaining
 
     def _route_delay_and_loss(self, service_id: str) -> tuple[float, float]:
         delay_ms = 0.0
@@ -227,14 +256,24 @@ class NetworkSim:
         if self._injector is not None:
             self._injector.apply_tick(self.state.tick, self.state)
 
+        self._advance_pending_effects()
+
         arrivals: dict[str, list[Request]] = {}
         arrived_counts: dict[str, int] = {}
+        throttle_dropped: dict[str, int] = {}
         for sid, service in self.state.services.items():
             count = self.state.workloads[sid].sample(self._arrival_streams[sid], tau)
             arrived_counts[sid] = count
-            arrivals[sid] = [Request(arrival_time=tick_start) for _ in range(count)]
+            admitted = count
+            if service.rate_limit is not None:
+                cap = int(service.rate_limit * tau)
+                admitted = min(count, cap)
+            throttle_dropped[sid] = count - admitted
+            arrivals[sid] = [Request(arrival_time=tick_start) for _ in range(admitted)]
 
-        dropped_counts: dict[str, int] = {sid: 0 for sid in self.state.services}
+        dropped_counts: dict[str, int] = {
+            sid: throttle_dropped[sid] for sid in self.state.services
+        }
         for sid, service in self.state.services.items():
             delay, loss = self._route_delay_and_loss(sid)
             for request in arrivals[sid]:
@@ -338,7 +377,6 @@ class NetworkSim:
         child.seed_manager = self.seed_manager.child(label)
         child.state = _copy_entities(self.state)
         child._injector = self._injector
-        child._service_counts = dict(self._service_counts)
         child._arrival_streams = {
             sid: _clone_generator(generator)
             for sid, generator in self._arrival_streams.items()
