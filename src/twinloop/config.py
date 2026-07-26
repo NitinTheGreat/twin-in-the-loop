@@ -77,6 +77,25 @@ class RuleAgentConfig(BaseModel):
     throttle_fraction: float = 0.6
 
 
+class LLMConfig(BaseModel):
+    provider: str = "local"
+    model: str = "qwen2.5:7b-instruct"
+    temperature: float = 0.0
+    timeout_seconds: float = 30.0
+    base_url: str = "http://localhost:11434/v1"
+    api_key_env: str = "LLM_API_KEY"
+    max_retries: int = 2
+    max_calls: int = 5000
+    max_tokens: int = 5000000
+    cache_dir: str = "results/llm_cache"
+    cache_bypass: bool = False
+    cache_only: bool = False
+    react_max_steps: int = 4
+    react_timeout_seconds: float = 20.0
+    log_path: str = "results/logs/llm_calls.jsonl"
+    prompt_version: str = "v1"
+
+
 class AgentConfig(BaseModel):
     agent_type: str = "null"
     prompt_version: str = "v0"
@@ -100,6 +119,7 @@ class ExperimentConfig(BaseModel):
     slo: SLOConfig = Field(default_factory=SLOConfig)
     actions: ActionsConfig = Field(default_factory=ActionsConfig)
     rule_agent: RuleAgentConfig = Field(default_factory=RuleAgentConfig)
+    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
 def load_config(path: Union[str, Path]) -> ExperimentConfig:
