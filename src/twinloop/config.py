@@ -96,6 +96,12 @@ class LLMConfig(BaseModel):
     prompt_version: str = "v1"
 
 
+class GraphConfig(BaseModel):
+    decision_interval_ticks: int = 10
+    retry_cap: int = 2
+    checkpoint_path: str = "results/checkpoints/graph.sqlite"
+
+
 class AgentConfig(BaseModel):
     agent_type: str = "null"
     prompt_version: str = "v0"
@@ -120,6 +126,7 @@ class ExperimentConfig(BaseModel):
     actions: ActionsConfig = Field(default_factory=ActionsConfig)
     rule_agent: RuleAgentConfig = Field(default_factory=RuleAgentConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
+    graph: GraphConfig = Field(default_factory=GraphConfig)
 
 
 def load_config(path: Union[str, Path]) -> ExperimentConfig:
