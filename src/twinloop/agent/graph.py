@@ -45,6 +45,8 @@ class EpisodeResult:
     exhaustions: int = 0
     llm_calls: int = 0
     llm_tokens: int = 0
+    llm_tokens_in: int = 0
+    llm_tokens_out: int = 0
 
 
 class GraphRuntime:
@@ -63,6 +65,10 @@ class GraphRuntime:
         self.first_proposal = None
         self.verdict = None
         self.result = None
+        self.proposals = []
+        self.pre_action_sim = None
+        self.capture_pre_action = False
+        self.llm_index_start = 0
 
 
 def _action_dict(action) -> dict:
@@ -123,6 +129,12 @@ def build_graph(runtime: GraphRuntime, config, gate_enabled: bool, checkpointer)
         runtime.first_proposal = None
         runtime.result = None
         runtime.verdict = None
+        runtime.proposals = []
+        runtime.pre_action_sim = (
+            runtime.sim.fork() if runtime.capture_pre_action else None
+        )
+        client = getattr(runtime.agent, "client", None)
+        runtime.llm_index_start = len(client.records) if client is not None else 0
         return {
             "tick": obs.tick,
             "observation_text": runtime.summarizer.render(obs),
@@ -142,11 +154,21 @@ def build_graph(runtime: GraphRuntime, config, gate_enabled: bool, checkpointer)
         runtime.proposal = action
         if runtime.first_proposal is None:
             runtime.first_proposal = action
+        runtime.proposals.append(
+            {
+                "action": action,
+                "retry_index": len(runtime.proposals),
+                "verdict": None,
+                "was_applied": False,
+            }
+        )
         return {"proposal": _action_dict(action)}
 
     def validate(state: DecisionState) -> dict:
         verdict = runtime.validator.validate(runtime.sim, runtime.proposal, runtime.obs)
         runtime.verdict = verdict
+        if runtime.proposals:
+            runtime.proposals[-1]["verdict"] = verdict
         update = {"verdict": _verdict_dict(verdict)}
         if verdict.approved:
             return update
@@ -171,6 +193,8 @@ def build_graph(runtime: GraphRuntime, config, gate_enabled: bool, checkpointer)
         applied = action if semantic.valid else NoOp()
         result = execute_action(runtime.sim, applied, runtime.actions_config)
         runtime.result = result
+        if not state.get("exhausted") and semantic.valid and runtime.proposals:
+            runtime.proposals[-1]["was_applied"] = True
         return {"applied_action": _action_dict(applied), "action_valid": semantic.valid}
 
     def finalise(state: DecisionState) -> dict:
@@ -227,7 +251,7 @@ def _feedback_from_verdict(verdict) -> TwinFeedback:
     )
 
 
-def _drive(runtime, graph, config, seed, gate_enabled, state_sink):
+def _drive(runtime, graph, config, seed, gate_enabled, state_sink, decision_hook, thread_prefix):
     result = EpisodeResult(
         arm=_arm_name(runtime.agent, gate_enabled, config),
         seed=seed,
@@ -236,13 +260,14 @@ def _drive(runtime, graph, config, seed, gate_enabled, state_sink):
     )
     interval = config.graph.decision_interval_ticks
     total = config.sim.episode_ticks
+    decision_index = 0
     for _ in range(total):
         metrics = runtime.sim.step()
         obs = runtime.collector.observe(metrics)
         runtime.latest_obs = obs
         result.metrics.append(metrics)
         if metrics.tick % interval == 0:
-            thread = {"configurable": {"thread_id": f"{seed}-{metrics.tick}"}}
+            thread = {"configurable": {"thread_id": f"{thread_prefix}-{metrics.tick}"}}
             init = {
                 "tick": metrics.tick,
                 "retry_count": 0,
@@ -263,27 +288,49 @@ def _drive(runtime, graph, config, seed, gate_enabled, state_sink):
             result.rejections += record["rejections"]
             result.retries += record["retries"]
             result.exhaustions += 1 if record["exhausted"] else 0
+            if decision_hook is not None:
+                decision_hook(
+                    decision_index, record, runtime.proposals, runtime.pre_action_sim
+                )
+            decision_index += 1
     result.violation_ticks = runtime.collector.evaluator.total_violation_ticks
     client = getattr(runtime.agent, "client", None)
     if client is not None:
         result.llm_calls = len(client.records)
-        result.llm_tokens = sum(r.tokens_in + r.tokens_out for r in client.records)
+        result.llm_tokens_in = sum(r.tokens_in for r in client.records)
+        result.llm_tokens_out = sum(r.tokens_out for r in client.records)
+        result.llm_tokens = result.llm_tokens_in + result.llm_tokens_out
     return result
 
 
 def run_episode(
-    sim, agent, validator, config, seed, gate=None, checkpointer=None, state_sink=None
+    sim,
+    agent,
+    validator,
+    config,
+    seed,
+    gate=None,
+    checkpointer=None,
+    state_sink=None,
+    decision_hook=None,
+    thread_prefix=None,
 ):
     gate_enabled = (validator is not None) if gate is None else gate
     collector = Collector(summarize_topology(sim.topology), config.slo)
     summarizer = Summarizer(config.slo)
     runtime = GraphRuntime(sim, agent, validator, collector, summarizer, config)
+    runtime.capture_pre_action = decision_hook is not None
+    prefix = thread_prefix if thread_prefix is not None else str(seed)
 
     if checkpointer is not None:
         graph = build_graph(runtime, config, gate_enabled, checkpointer)
-        return _drive(runtime, graph, config, seed, gate_enabled, state_sink)
+        return _drive(
+            runtime, graph, config, seed, gate_enabled, state_sink, decision_hook, prefix
+        )
 
     Path(config.graph.checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
     with SqliteSaver.from_conn_string(config.graph.checkpoint_path) as sqlite_checkpointer:
         graph = build_graph(runtime, config, gate_enabled, sqlite_checkpointer)
-        return _drive(runtime, graph, config, seed, gate_enabled, state_sink)
+        return _drive(
+            runtime, graph, config, seed, gate_enabled, state_sink, decision_hook, prefix
+        )

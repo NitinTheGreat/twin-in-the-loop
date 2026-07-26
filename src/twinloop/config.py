@@ -102,6 +102,11 @@ class GraphConfig(BaseModel):
     checkpoint_path: str = "results/checkpoints/graph.sqlite"
 
 
+class EvaluationConfig(BaseModel):
+    harm_threshold_ticks: int = 3
+    a4_fidelity: float = 0.6
+
+
 class AgentConfig(BaseModel):
     agent_type: str = "null"
     prompt_version: str = "v0"
@@ -112,7 +117,7 @@ class AgentConfig(BaseModel):
 class ExperimentConfig(BaseModel):
     name: str = "default"
     seeds: list[int] = Field(default_factory=lambda: list(range(30)))
-    arms: list[str] = Field(default_factory=lambda: ["A0", "A1", "A2", "A3", "A4", "A5"])
+    arms: list[str] = Field(default_factory=lambda: ["A0", "A1", "A2", "A3", "A4"])
     fidelity_levels: list[float] = Field(
         default_factory=lambda: [0.0, 0.25, 0.5, 0.75, 1.0]
     )
@@ -127,6 +132,7 @@ class ExperimentConfig(BaseModel):
     rule_agent: RuleAgentConfig = Field(default_factory=RuleAgentConfig)
     llm: LLMConfig = Field(default_factory=LLMConfig)
     graph: GraphConfig = Field(default_factory=GraphConfig)
+    evaluation: EvaluationConfig = Field(default_factory=EvaluationConfig)
 
 
 def load_config(path: Union[str, Path]) -> ExperimentConfig:
