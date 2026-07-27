@@ -77,7 +77,17 @@ def _schedule_for(config, seed):
     return topology, schedule
 
 
-def run_single(config, run, output_dir, provider_factory, budget, cache, counterfactual, checkpointer):
+def run_single(
+    config,
+    run,
+    output_dir,
+    provider_factory,
+    budget,
+    cache,
+    counterfactual,
+    checkpointer,
+    on_decision_progress=None,
+):
     output_dir = Path(output_dir)
     topology, schedule = _schedule_for(config, run.seed)
     sim = NetworkSim(topology, config.sim, seed=run.seed, schedule=schedule)
@@ -162,6 +172,8 @@ def run_single(config, run, output_dir, provider_factory, budget, cache, counter
                     counterfactual_wallclock_ms=gt.cf_wallclock_ms,
                 )
             )
+        if on_decision_progress is not None:
+            on_decision_progress(decision_index)
 
     hook = make_counterfactual_hook(config, on_decision) if counterfactual else None
     result = run_episode(
@@ -233,6 +245,8 @@ def run_sweep(
     counterfactual=True,
     checkpointer_factory=None,
     progress=None,
+    on_start=None,
+    decision_progress=None,
 ):
     output_dir = Path(output_dir)
     arms = [a for a in default_arms(config) if arm_ids is None or a.arm_id in arm_ids]
@@ -253,12 +267,22 @@ def run_sweep(
     cache = ResponseCache(Path(config.llm.cache_dir) / "cache.json")
 
     executed = 0
-    for run in runs:
+    for index, run in enumerate(runs, start=1):
         key = (run.arm_id, run.seed, run.fidelity)
         if key in completed:
             continue
+        if on_start is not None:
+            on_start(run, index, len(runs))
         summary, result, records = run_single(
-            config, run, output_dir, provider_factory, budget, cache, counterfactual, checkpointer_factory()
+            config,
+            run,
+            output_dir,
+            provider_factory,
+            budget,
+            cache,
+            counterfactual,
+            checkpointer_factory(),
+            decision_progress,
         )
         for record in records:
             append_jsonl(output_dir / "proposals.jsonl", record)

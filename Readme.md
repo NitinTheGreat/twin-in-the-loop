@@ -45,7 +45,8 @@ streamlit run demo/review1_app.py
 
 
 ```
-python scripts/run_experiments.py --arms A0,A1,A2,A3,A4 --seeds 0,1 --provider cloud
+python scripts/run_experiments.py --provider gemini --arms A0,A1,A2,A3,A4 --seeds 0,1
+
 ```
 
 
