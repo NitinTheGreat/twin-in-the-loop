@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from twinloop.config import ExperimentConfig
 from twinloop.experiment.logging import read_jsonl
 from twinloop.experiment.runner import run_sweep
-from twinloop.llm.providers import ProviderResponse
+from twinloop.llm.providers import GeminiProvider, ProviderResponse
 
 
 class ScriptedProvider:
@@ -41,9 +41,44 @@ def _first_violator(prompt):
     return "svc0"
 
 
-def _provider_factory(name):
+def _load_dotenv():
+    path = Path(__file__).resolve().parents[1] / ".env"
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip('"').strip("'")
+        if key and key not in os.environ:
+            os.environ[key] = value
+
+
+PROVIDER_PRESETS = {
+    "gemini": {
+        "provider": "gemini",
+        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "model": "gemini-3.6-flash",
+        "api_key_env": "GEMINI_API_KEY",
+    },
+    "openai": {
+        "provider": "cloud",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "api_key_env": "OPENAI_API_KEY",
+    },
+}
+
+
+def _build_provider_factory(name, config):
     if name == "scripted":
         return lambda: ScriptedProvider()
+    if config.llm.provider == "gemini":
+        api_key = os.environ.get(config.llm.api_key_env)
+        base_url = config.llm.base_url
+        return lambda: GeminiProvider(api_key, base_url)
     return None
 
 
@@ -60,27 +95,48 @@ def main() -> None:
     parser.add_argument("--seeds", default=None)
     parser.add_argument("--fidelity-levels", default=None)
     parser.add_argument("--episode-ticks", type=int, default=None)
-    parser.add_argument("--provider", default="scripted", choices=["scripted", "local", "cloud"])
+    parser.add_argument(
+        "--provider",
+        default="scripted",
+        choices=["scripted", "local", "cloud", "gemini", "openai"],
+    )
     parser.add_argument("--model", default=None)
     parser.add_argument("--base-url", default=None)
+    parser.add_argument("--api-key-env", default=None)
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
 
+    _load_dotenv()
+
     config = ExperimentConfig()
     if args.episode_ticks is not None:
         config.sim.episode_ticks = args.episode_ticks
-    if args.provider in ("local", "cloud"):
+
+    preset = PROVIDER_PRESETS.get(args.provider)
+    if preset is not None:
+        config.llm.provider = preset["provider"]
+        config.llm.base_url = preset["base_url"]
+        config.llm.model = preset["model"]
+        config.llm.api_key_env = preset["api_key_env"]
+    elif args.provider in ("local", "cloud"):
         config.llm.provider = args.provider
+
     if args.model is not None:
         config.llm.model = args.model
     if args.base_url is not None:
         config.llm.base_url = args.base_url
+    if args.api_key_env is not None:
+        config.llm.api_key_env = args.api_key_env
 
-    if args.provider == "cloud" and not os.environ.get(config.llm.api_key_env):
-        print(f"warning: --provider cloud but {config.llm.api_key_env} is not set in the environment")
-    if args.provider in ("local", "cloud") and "localhost" in config.llm.base_url and args.base_url is None:
-        print(f"warning: --provider {args.provider} is targeting {config.llm.base_url}; pass --base-url for a remote endpoint")
+    uses_llm = args.provider != "scripted"
+    needs_key = args.provider in ("gemini", "openai", "cloud")
+    if needs_key and not os.environ.get(config.llm.api_key_env):
+        print(f"warning: {config.llm.api_key_env} is not set (checked environment and .env)")
+    if uses_llm and "localhost" in config.llm.base_url and args.base_url is None:
+        print(f"warning: targeting {config.llm.base_url}; a local server must be running or pass --base-url")
+
+    provider_factory = _build_provider_factory(args.provider, config)
 
     arm_ids = _parse_list(args.arms, str)
     seeds = _parse_list(args.seeds, int)
@@ -89,7 +145,7 @@ def main() -> None:
     plan = run_sweep(
         config,
         args.output,
-        provider_factory=_provider_factory(args.provider),
+        provider_factory=provider_factory,
         arm_ids=arm_ids,
         seeds=seeds,
         fidelity_levels=fidelity_levels,
@@ -98,29 +154,48 @@ def main() -> None:
     print("Twin-in-the-Loop experiment sweep")
     print(f"  output dir        : {args.output}")
     print(f"  provider          : {args.provider}")
+    if uses_llm:
+        print(f"  model             : {config.llm.model}")
+        print(f"  endpoint          : {config.llm.base_url}")
+        print(f"  api key env       : {config.llm.api_key_env}")
     print(f"  planned runs      : {plan.planned_runs}")
     print(f"  estimated LLM calls: {plan.estimated_llm_calls}")
     if args.dry_run:
         print("  dry run: nothing executed.")
         return
 
+    print("running (each dot is one decision; LLM arms call the model per decision):", flush=True)
+
+    def _on_start(run, index, total):
+        print(
+            f"  [{index}/{total}] {run.arm_id} seed={run.seed} fidelity={run.fidelity} ",
+            end="",
+            flush=True,
+        )
+
+    def _on_decision(decision_index):
+        print(".", end="", flush=True)
+
     def _progress(run, executed, total, summary):
         print(
-            f"  [{executed}/{total}] {run.arm_id} seed={run.seed} fidelity={run.fidelity} "
-            f"-> violation_ticks={summary['slo_violation_ticks']} "
-            f"proposals={summary['proposals']} harmful={summary['harmful_proposals']} "
-            f"blocked={summary['harmful_proposals_blocked']}"
+            f" viol={summary['slo_violation_ticks']} "
+            f"harmful={summary['harmful_proposals']} "
+            f"blocked={summary['harmful_proposals_blocked']} "
+            f"calls={summary['llm_calls']}",
+            flush=True,
         )
 
     result = run_sweep(
         config,
         args.output,
-        provider_factory=_provider_factory(args.provider),
+        provider_factory=provider_factory,
         arm_ids=arm_ids,
         seeds=seeds,
         fidelity_levels=fidelity_levels,
         resume=not args.no_resume,
         progress=_progress,
+        on_start=_on_start,
+        decision_progress=_on_decision,
     )
     print(f"done: executed {result.executed} of {result.planned_runs} runs")
 

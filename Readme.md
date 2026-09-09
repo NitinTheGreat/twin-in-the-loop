@@ -44,8 +44,32 @@ streamlit run demo/review1_app.py
 ```
 
 
+## Demo 2: the interactive review page
+
+A single self-contained page covering all twelve levels, with every figure produced by
+running the project's own code. Open it straight from disk:
+
 ```
-python scripts/run_experiments.py --arms A0,A1,A2,A3,A4 --seeds 0,1 --provider cloud
+review/index.html
+```
+
+To unlock the **Run it live** section — which executes one complete episode on your
+machine and streams the ticks, prompts, model replies, twin forecasts, verdicts and
+ground truth to the browser as they happen — start the local server and open the
+address it prints instead:
+
+```
+python scripts/live_server.py
+# then open http://127.0.0.1:8765/
+```
+
+Standard library only; it serves the page back to you so the browser is allowed to talk
+to it. Binds to localhost, one episode per request, no auth — it is a demo, not a service.
+
+
+```
+python scripts/run_experiments.py --provider gemini --arms A0,A1,A2,A3,A4 --seeds 0,1
+
 ```
 
 
