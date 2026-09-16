@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from twinloop.sim.metrics import latency_ms, mean_latency, display_latency
 from twinloop.actions.schema import MigrateService, NoOp
 from twinloop.config import SimConfig, TwinConfig
 from twinloop.faults.schedule import FaultEvent, FaultSchedule
@@ -36,7 +37,7 @@ def _topology(rate=25.0):
 
 
 def _mean_p95(metrics):
-    return [float(np.mean(list(m.service_p95.values()))) * 1000 for m in metrics]
+    return [latency_ms(mean_latency(m.service_p95.values())) for m in metrics]
 
 
 def _sim(schedule, advance=25, seed=3):
@@ -70,8 +71,8 @@ def _scenario(title, schedule, action, fidelity, horizon=30):
     print("    tick |  twin+action  twin+noop | real+action  real+noop")
     for k in range(0, horizon, 6):
         print(
-            f"    {k:>4} | {twin_action[k]:11.0f}  {twin_noop[k]:9.0f} | "
-            f"{real_a[k]:10.0f}  {real_n[k]:9.0f}"
+            f"    {k:>4} | {display_latency(twin_action[k])}  {display_latency(twin_noop[k])} | "
+            f"{display_latency(real_a[k])}  {display_latency(real_n[k])}"
         )
     print(f"  TWIN VERDICT: {'APPROVE' if verdict.approved else 'REJECT'}")
     print(f"    predicted violation-ticks: action {verdict.action_violation_ticks}, no-op {verdict.noop_violation_ticks}")

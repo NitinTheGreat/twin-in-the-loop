@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..sim.metrics import latency_ms, mean_latency, display_latency, rounded_latency
+
 import os
 from dataclasses import dataclass, field
 from typing import Optional
@@ -95,6 +97,7 @@ class ProposalView:
     harm_delta: int = 0
     harmful: bool = False
     was_applied: bool = False
+    decision_trace: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -179,7 +182,7 @@ def _mean(values):
 
 
 def _trajectory_p95(metrics):
-    return [_mean(m.service_p95.values()) * 1000.0 for m in metrics]
+    return [latency_ms(mean_latency(m.service_p95.values())) for m in metrics]
 
 
 def run_instrumented_episode(
@@ -204,7 +207,7 @@ def run_instrumented_episode(
         arrival_rate=arrival_rate,
     )
     topology = build_topology(config.topology, config.sim, arrival_rate=arrival_rate)
-    schedule = FaultSchedule.generate(seed, config.fault, targets_from_topology(topology))
+    schedule = FaultSchedule.generate(seed, config.fault, targets_from_topology(topology, config.fault.gateway_faultable))
     sim = NetworkSim(topology, config.sim, seed=seed, schedule=schedule)
 
     agent = _build_agent(agent_kind, provider_name, config, cache_dir)
@@ -255,7 +258,7 @@ def run_instrumented_episode(
             link_latency=dict(metrics.link_latency),
             link_status={lid: sim.state.links[lid].status for lid, _, _ in view.links},
             service_host={sid: sim.state.services[sid].host_node_id for sid, _ in view.services},
-            service_p95_ms={sid: metrics.service_p95.get(sid, 0.0) * 1000.0 for sid, _ in view.services},
+            service_p95_ms={sid: latency_ms(metrics.service_p95.get(sid)) for sid, _ in view.services},
             service_drop={sid: metrics.service_drop_rate.get(sid, 0.0) for sid, _ in view.services},
             service_compliant={sid: obs.slo_status[sid].compliant for sid, _ in view.services},
             active_faults=active,
@@ -292,6 +295,7 @@ def run_instrumented_episode(
                 retry_index=retries,
                 reasoning=reasoning,
                 tools_called=tools,
+                decision_trace=dict(getattr(agent, "last_trace", {})),
             )
             if verdict is not None:
                 proposal.approved = verdict.approved
@@ -301,7 +305,8 @@ def run_instrumented_episode(
                 proposal.twin_action_p95 = _trajectory_p95(verdict.action_metrics)
                 proposal.twin_noop_p95 = _trajectory_p95(verdict.noop_metrics)
             proposal_records.append(
-                {"action": action, "retry_index": retries, "verdict": verdict, "was_applied": False, "view": proposal}
+                {"action": action, "retry_index": retries, "verdict": verdict, "was_applied": False,
+                 "view": proposal, "decision_trace": proposal.decision_trace}
             )
 
             if verdict is None or verdict.approved:

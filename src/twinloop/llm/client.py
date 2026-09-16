@@ -45,7 +45,12 @@ class LLMClient:
         self.log_path = Path(log_path) if log_path is not None else Path(config.log_path)
         self.records: list[LLMRecord] = []
 
-    def complete(self, messages: list[dict]) -> tuple[str, LLMRecord]:
+    def complete(self, messages: list[dict], *, timeout_seconds=None) -> tuple[str, LLMRecord]:
+        timeout = self.config.timeout_seconds
+        if timeout_seconds is not None:
+            timeout = min(timeout, timeout_seconds)
+        if timeout <= 0:
+            raise TimeoutError("no provider time remaining")
         prompt = canonical_prompt(messages)
         key = cache_key(self.config.model, self.config.temperature, prompt)
 
@@ -72,7 +77,7 @@ class LLMClient:
             messages,
             self.config.model,
             self.config.temperature,
-            self.config.timeout_seconds,
+            timeout,
         )
         latency_ms = (time.perf_counter() - start) * 1000.0
         self.budget.charge_tokens(response.tokens_in + response.tokens_out)

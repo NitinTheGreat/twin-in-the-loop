@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from twinloop.sim.metrics import latency_ms, mean_latency, display_latency
 from twinloop.config import SimConfig, TopologyConfig
 from twinloop.sim.engine import NetworkSim, build_topology
 
@@ -46,7 +47,7 @@ def main() -> None:
                 f"{metrics.node_utilisation[e] * 100:5.1f}%" for e in edge_ids
             )
             lat = " ".join(
-                f"{metrics.service_p95[s] * 1000:8.2f}" for s in service_ids
+                display_latency(latency_ms(metrics.service_p95[s])) for s in service_ids
             )
             print(f"{metrics.tick:4d} | {util} | {lat}")
 
@@ -58,10 +59,10 @@ def main() -> None:
         print(f"  {e}: mean utilisation {values.mean() * 100:5.1f}%  "
               f"(std {values.std() * 100:4.1f}%)")
     for s in service_ids:
-        p95 = np.array([m.service_p95[s] for m in tail])
+        p95 = latency_ms(mean_latency(m.service_p95[s] for m in tail))
         thr = np.array([m.service_throughput[s] for m in tail])
         drop = np.array([m.service_drop_rate[s] for m in tail])
-        print(f"  {s}: p95 {p95.mean() * 1000:7.2f} ms  "
+        print(f"  {s}: p95 {display_latency(p95)}  "
               f"throughput {thr.mean():6.2f} req/s  "
               f"drop {drop.mean() * 100:4.1f}%")
 

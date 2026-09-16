@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from twinloop.sim.metrics import latency_ms, mean_latency, display_latency
 from twinloop.actions.executor import execute_action
 from twinloop.actions.schema import NoOp
 from twinloop.config import ActionsConfig, SimConfig, SLOConfig, TopologyConfig
@@ -46,7 +47,7 @@ def _window(observations, sid, lo, hi):
         for t in range(lo, hi)
         if 0 <= t < len(observations)
     ]
-    p95 = float(np.mean([s.p95_ms for s in picks])) if picks else 0.0
+    p95 = mean_latency(s.p95_ms for s in picks)
     viol = sum(1 for s in picks if not s.compliant)
     return p95, viol
 
@@ -86,7 +87,7 @@ def _main_episode():
         print("-" * 74)
         print(f"  tick {tick:>3}: {result.reason} (cost {result.cost:.0f})")
         print(f"           trigger: {reason}")
-        print(f"           {sid}: p95 {b_p95:.0f}ms/{b_viol} viol  ->  {a_p95:.0f}ms/{a_viol} viol")
+        print(f"           {sid}: p95 {display_latency(b_p95)}/{b_viol} viol  ->  {display_latency(a_p95)}/{a_viol} viol")
     print()
 
 

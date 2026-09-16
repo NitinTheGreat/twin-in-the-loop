@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="5" skipped="0" tests="28" time="1.869" timestamp="2026-09-16T22:18:33.384086+05:30" hostname="DESKTOP-N4GJIRK"><testcase classname="tests.test_provider_deadlines" name="test_transport_retries_share_one_deadline[provider0]" time="0.002"><failure message="urllib.error.HTTPError: HTTP Error 503: busy">tests\test_provider_deadlines.py:27: in test_transport_retries_share_one_deadline
+    provider.complete([{"role": "user", "content": "test"}], "test", 0, 5)
+src\twinloop\llm\providers.py:58: in complete
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_provider_deadlines.py:17: in open_request
+    raise urllib.error.HTTPError("unused", 503, "busy", {}, None)
+E   urllib.error.HTTPError: HTTP Error 503: busy</failure></testcase><testcase classname="tests.test_provider_deadlines" name="test_transport_retries_share_one_deadline[provider1]" time="0.002"><failure message="urllib.error.HTTPError: HTTP Error 503: busy">tests\test_provider_deadlines.py:27: in test_transport_retries_share_one_deadline
+    provider.complete([{"role": "user", "content": "test"}], "test", 0, 5)
+src\twinloop\llm\providers.py:136: in complete
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_provider_deadlines.py:17: in open_request
+    raise urllib.error.HTTPError("unused", 503, "busy", {}, None)
+E   urllib.error.HTTPError: HTTP Error 503: busy</failure></testcase><testcase classname="tests.test_provider_deadlines" name="test_transport_timeout_is_not_retried[provider0]" time="0.001"><failure message="Failed: must not sleep">tests\test_provider_deadlines.py:38: in open_request
+    raise urllib.error.URLError(TimeoutError("read timeout"))
+E   urllib.error.URLError: &lt;urlopen error read timeout&gt;
+
+During handling of the above exception, another exception occurred:
+tests\test_provider_deadlines.py:43: in test_transport_timeout_is_not_retried
+    provider.complete([{"role": "user", "content": "test"}], "test", 0, 5)
+src\twinloop\llm\providers.py:76: in complete
+    time.sleep(2**attempt)
+tests\test_provider_deadlines.py:41: in &lt;lambda&gt;
+    monkeypatch.setattr("twinloop.llm.providers.time.sleep", lambda _: pytest.fail("must not sleep"))
+                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: must not sleep</failure></testcase><testcase classname="tests.test_provider_deadlines" name="test_transport_timeout_is_not_retried[provider1]" time="0.001"><failure message="Failed: must not sleep">tests\test_provider_deadlines.py:38: in open_request
+    raise urllib.error.URLError(TimeoutError("read timeout"))
+E   urllib.error.URLError: &lt;urlopen error read timeout&gt;
+
+During handling of the above exception, another exception occurred:
+tests\test_provider_deadlines.py:43: in test_transport_timeout_is_not_retried
+    provider.complete([{"role": "user", "content": "test"}], "test", 0, 5)
+src\twinloop\llm\providers.py:150: in complete
+    time.sleep(2**attempt)
+tests\test_provider_deadlines.py:41: in &lt;lambda&gt;
+    monkeypatch.setattr("twinloop.llm.providers.time.sleep", lambda _: pytest.fail("must not sleep"))
+                                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: must not sleep</failure></testcase><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies0-decision_produced-1-0-RestartService]" time="0.030" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies1-decision_produced-2-1-RestartService]" time="0.012" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies2-decision_produced-4-3-RestartService]" time="0.014" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies3-tool_budget_exhausted-4-3-NoOp]" time="0.014" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies4-deliberate_no_op-4-3-NoOp]" time="0.016" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies5-final_parse_failure-4-3-NoOp]" time="0.016" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies6-validation_exhausted-4-3-NoOp]" time="0.014" /><testcase classname="tests.test_llm_finalization" name="test_matched_budget_outcomes[replies7-timeout-1-0-NoOp]" time="0.009" /><testcase classname="tests.test_llm_finalization" name="test_provider_budget_exhaustion_is_not_deliberate_hold" time="0.010" /><testcase classname="tests.test_llm_finalization" name="test_finalization_time_reserved_and_timeout_propagated" time="0.011" /><testcase classname="tests.test_llm_finalization" name="test_overrun_does_not_start_another_call" time="0.010" /><testcase classname="tests.test_llm_finalization" name="test_graph_retains_failure_provenance" time="0.039" /><testcase classname="tests.test_llm_finalization" name="test_last_call_is_reserved_for_every_budget[1]" time="0.010" /><testcase classname="tests.test_llm_finalization" name="test_last_call_is_reserved_for_every_budget[2]" time="0.011" /><testcase classname="tests.test_llm_finalization" name="test_last_call_is_reserved_for_every_budget[3]" time="0.012" /><testcase classname="tests.test_llm_finalization" name="test_last_call_is_reserved_for_every_budget[4]" time="0.013" /><testcase classname="tests.test_llm_finalization" name="test_final_prompt_preserves_distinct_evidence_and_feedback" time="0.014" /><testcase classname="tests.test_llm_finalization" name="test_final_repeats_rejected_action_is_validation_failure" time="0.014" /><testcase classname="tests.test_llm_finalization" name="test_invalid_exploration_still_has_final_opportunity[{&quot;action&quot;:{&quot;type&quot;:&quot;restart_service&quot;,&quot;service_id&quot;:&quot;ghost&quot;}}]" time="0.011" /><testcase classname="tests.test_llm_finalization" name="test_invalid_exploration_still_has_final_opportunity[{&quot;action&quot;:{&quot;type&quot;:&quot;unknown&quot;}}]" time="0.011" /><testcase classname="tests.test_llm_finalization" name="test_invalid_exploration_still_has_final_opportunity[{&quot;tool&quot;:123,&quot;tool_input&quot;:[]}]" time="0.011" /><testcase classname="tests.test_llm_finalization" name="test_experiment_json_retains_failure_and_retry_provenance" time="0.057" /><testcase classname="tests.test_llm_finalization" name="test_graph_stores_each_attempt_trace_separately" time="0.038" /><testcase classname="tests.test_llm_finalization" name="test_dashboard_paths_expose_failure_category" time="0.139"><failure message="AssertionError: assert 'deliberate_no_op' == 'tool_budget_exhausted'&#10;  &#10;  - tool_budget_exhausted&#10;  + deliberate_no_op">tests\test_llm_finalization.py:233: in test_dashboard_paths_expose_failure_category
+    assert proposal["decision_outcome"] == truth["decision_outcome"] == "tool_budget_exhausted"
+E   AssertionError: assert 'deliberate_no_op' == 'tool_budget_exhausted'
+E     
+E     - tool_budget_exhausted
+E     + deliberate_no_op</failure></testcase></testsuite></testsuites>

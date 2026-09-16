@@ -8,6 +8,13 @@ demonstrate its IoT capabilities.
 **Date of runs:** 2026-09-09. All figures below were produced by the runs recorded in this
 document; nothing is estimated, copied from an earlier draft, or rounded from memory.
 
+> **⚠ NUMBERS SUPERSEDED (2026-09-16).** The Priority-1 simulator corrections (`docs/research/audit_fix1.md`)
+> changed SLO semantics (zero-completion ticks are now non-compliant), fault composition, restart/migration
+> downtime, and memory-pressure effects. The A0 do-nothing baseline moved from **130.5 → 136.3** mean
+> violation-ticks (seed 6: 139 → 195). **Every violation-tick figure in this document predates those fixes
+> and must be re-measured before publication.** Structural conclusions (fault-boundary blindness, the
+> reject-all ablation, horizon trade-offs) are expected to hold qualitatively but are unverified post-fix.
+
 ---
 
 ## 0. What the testbed actually is — read this before the results
@@ -23,7 +30,7 @@ measurement *of*. Four honest limits govern the whole document:
 | "LLM agent" results | The A2/A3 arms are driven by a **scripted stub**, not a language model. They are labelled stub-driven in every table. The one real-model arm is discussed under deviations (§7). |
 
 The topology under test throughout: **1 gateway, 4 edge nodes, 12 devices, 6 services,
-17 links**. SLO: **p95 latency ≤ 600 ms**, **availability ≥ 99 %**, at-risk band opening at
+16 links**. SLO: **p95 latency ≤ 600 ms**, **availability ≥ 99 %**, at-risk band opening at
 0.85 × 600 = 510 ms. Episode length 120 ticks, decision interval 10 ticks, twin horizon
 20 ticks, harm threshold 3 violation-ticks.
 
@@ -297,7 +304,7 @@ same cost seen from the energy-proxy side.
   ────────           ──────────────        ───────          ────────────        ────
   6 services   ──►   Collector       ──►   HTTP/1.1    ──►  ThreadingHTTP  ──►  Browser
   17 nodes           + Summarizer          SSE over          Server              dashboard
-  17 links           + RuleAgent           TCP               live.py             review/
+  16 links           + RuleAgent           TCP               live.py             review/
   64 field-values    + Twin gate           127.0.0.1:8801    /api/run            index.html
   per tick           + Validator           text/event-stream
 ```
@@ -393,7 +400,7 @@ python scripts/live_server.py
 
 | Requirement | Implementation | Evidence |
 |---|---|---|
-| Real-time sensor values | Per-tick p95 latency, throughput, drop rate, node utilisation and link latency for all 6 services / 17 nodes / 17 links, pushed on every `tick` event | 60 `tick` events in the §4.2 capture, median 8.4 ms apart |
+| Real-time sensor values | Per-tick p95 latency, throughput, drop rate, node utilisation and link latency for all 6 services / 17 nodes / 16 links, pushed on every `tick` event | 60 `tick` events in the §4.2 capture, median 8.4 ms apart |
 | Device / actuator status | Node and link state (healthy / degraded / down), service replica counts, and the applied-action feed | `applied` events; `meta` carries the topology |
 | Alerts | SLO violations surfaced per service; at-risk band (≥ 510 ms) flagged before breach; twin **REJECTED** verdicts shown with reason text | `verdict` events carry `approved` + human-readable `reason` |
 | Graphs / history | Rolling per-service latency and utilisation series; the decision timeline with proposal → verdict → applied → truth grouped per decision | `decision_open` / `decision_close` bracket each group |

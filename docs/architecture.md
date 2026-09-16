@@ -109,6 +109,12 @@ class NetworkSim:
 
 **Default topology (v1)**: 1 gateway, 4 edge servers, 12 IoT devices, 6 services. Small enough to run hundreds of episodes, large enough that placement decisions are non-trivial.
 
+The v1 builder supports exactly one gateway; `n_gateways` rejects values other than
+1. Edge, device and service counts must be positive. Services wrap across hosts
+and clients when there are more services than either. Optional redundant links
+add an edge mesh and a second client attachment. Custom topology identifiers
+must be unique within each entity type.
+
 ### 5.2 `faults/` — fault injection
 
 Faults are declarative, scheduled, and seeded.

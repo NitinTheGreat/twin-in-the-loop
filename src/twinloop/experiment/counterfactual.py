@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from ..actions.schema import NoOp
+from ..actions.schema import NoOp, RerouteTraffic
+from ..sim.routing import reroute_feasibility
 from ..twin.rollout import FAULT_MODE_SCHEDULED, rollout
 
 
@@ -18,6 +19,8 @@ class ProposalGroundTruth:
     harm_delta: int
     harmful: bool
     cf_wallclock_ms: float
+    reroute_feasibility: dict = field(default_factory=dict)
+    decision_trace: dict = field(default_factory=dict)
 
 
 def evaluate_decision(pre_action_sim, proposals, config):
@@ -36,6 +39,16 @@ def evaluate_decision(pre_action_sim, proposals, config):
 
     results = []
     for proposal in proposals:
+        relevant = set()
+        if isinstance(proposal["action"], RerouteTraffic):
+            relevant.add(proposal["action"].service_id)
+        if pre_action_sim._injector is not None:
+            for event in pre_action_sim._injector.schedule.events:
+                if (event.type in ("link_failure", "link_degradation")
+                        and event.start_tick < pre_action_sim.state.tick + horizon
+                        and event.start_tick + event.duration > pre_action_sim.state.tick):
+                    relevant.update(sid for sid, path in pre_action_sim.state.routes.items()
+                                    if event.target in path)
         start = time.perf_counter()
         action_res = rollout(
             pre_action_sim,
@@ -58,6 +71,8 @@ def evaluate_decision(pre_action_sim, proposals, config):
                 harm_delta=delta,
                 harmful=delta > threshold,
                 cf_wallclock_ms=cf_ms,
+                reroute_feasibility=reroute_feasibility(pre_action_sim.state, relevant),
+                decision_trace=proposal.get("decision_trace", {}),
             )
         )
     return results

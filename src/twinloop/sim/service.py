@@ -23,6 +23,17 @@ class Service:
     in_service: Optional[Request] = None
     baseline_mem: float = 0.0
     rate_limit: Optional[float] = None
+    source_node_id: str = ""
+    pending_request_losses: int = 0
+    total_request_losses: int = 0
+
+    def discard_requests(self) -> int:
+        lost = len(self.queue) + int(self.in_service is not None)
+        self.queue.clear()
+        self.in_service = None
+        self.pending_request_losses += lost
+        self.total_request_losses += lost
+        return lost
 
 
 def service_rate(allocated_cpu: float, replicas: int, cpu_demand_per_req: float) -> float:

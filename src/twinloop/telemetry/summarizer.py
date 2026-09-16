@@ -14,11 +14,12 @@ class Summarizer:
     def _service_line(self, sid: str, observation: Observation) -> str:
         status = observation.slo_status[sid]
         metrics = observation.metrics
+        p95_text = "missing" if status.p95_ms is None else f"{status.p95_ms:.0f}ms"
         p95_flag = "OK" if status.p95_ok else "FAIL"
         avail_flag = "OK" if status.availability_ok else "FAIL"
         return (
             f"  {sid} (host {observation.topology.service_hosts.get(sid, '?')}): "
-            f"p95={status.p95_ms:.0f}ms/{status.p95_target_ms:.0f} {p95_flag}, "
+            f"p95={p95_text}/{status.p95_target_ms:.0f} {p95_flag}, "
             f"avail={status.availability * 100:.1f}%/{status.availability_target * 100:.0f} {avail_flag}, "
             f"qlen={metrics.service_queue_len.get(sid, 0)}, "
             f"thr={metrics.service_throughput.get(sid, 0.0):.0f}rps"
@@ -33,8 +34,8 @@ class Summarizer:
         at_risk = [sid for sid, s in slo.items() if s.compliant and s.at_risk]
         healthy = [sid for sid, s in slo.items() if s.compliant and not s.at_risk]
 
-        violations.sort(key=lambda sid: (slo[sid].availability, -slo[sid].p95_ms))
-        at_risk.sort(key=lambda sid: -slo[sid].p95_ms)
+        violations.sort(key=lambda sid: (slo[sid].availability, -(slo[sid].p95_ms if slo[sid].p95_ms is not None else float("inf"))))
+        at_risk.sort(key=lambda sid: -(slo[sid].p95_ms if slo[sid].p95_ms is not None else float("inf")))
         healthy.sort()
 
         sections: list[str] = []

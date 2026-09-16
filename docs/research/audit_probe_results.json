@@ -1,0 +1,277 @@
+{
+  "memory_leak": {
+    "ticks_compared": 60,
+    "all_emitted_metrics_equal": true,
+    "healthy_memory": 5.0,
+    "leaking_memory": 125.0,
+    "host_mem_capacity": 100.0,
+    "leaking_host_memory_used": 130.0
+  },
+  "restart_during_leak": [
+    {
+      "tick": 61,
+      "memory": 127.0,
+      "status": "down"
+    },
+    {
+      "tick": 62,
+      "memory": 129.0,
+      "status": "down"
+    },
+    {
+      "tick": 63,
+      "memory": 5.0,
+      "status": "healthy"
+    },
+    {
+      "tick": 64,
+      "memory": 7.0,
+      "status": "healthy"
+    },
+    {
+      "tick": 65,
+      "memory": 9.0,
+      "status": "healthy"
+    }
+  ],
+  "topology": {
+    "nodes": 17,
+    "links": 16
+  },
+  "migration_route": {
+    "new_host": "edge1",
+    "original_route": [
+      "l_gw_dev0",
+      "l_gw_edge0"
+    ],
+    "route_after": [
+      "l_gw_dev0",
+      "l_gw_edge0"
+    ],
+    "route_reaches_new_host": false
+  },
+  "route_without_client_link": {
+    "valid": true,
+    "reason": "reroute accepted"
+  },
+  "overlapping_crashes": [
+    {
+      "tick_processed": 0,
+      "status": "down"
+    },
+    {
+      "tick_processed": 1,
+      "status": "down"
+    },
+    {
+      "tick_processed": 2,
+      "status": "down"
+    },
+    {
+      "tick_processed": 3,
+      "status": "down"
+    },
+    {
+      "tick_processed": 4,
+      "status": "down"
+    },
+    {
+      "tick_processed": 5,
+      "status": "down"
+    },
+    {
+      "tick_processed": 6,
+      "status": "down"
+    },
+    {
+      "tick_processed": 7,
+      "status": "down"
+    },
+    {
+      "tick_processed": 8,
+      "status": "down"
+    },
+    {
+      "tick_processed": 9,
+      "status": "down"
+    },
+    {
+      "tick_processed": 10,
+      "status": "healthy"
+    },
+    {
+      "tick_processed": 11,
+      "status": "healthy"
+    },
+    {
+      "tick_processed": 12,
+      "status": "healthy"
+    },
+    {
+      "tick_processed": 13,
+      "status": "healthy"
+    },
+    {
+      "tick_processed": 14,
+      "status": "healthy"
+    },
+    {
+      "tick_processed": 15,
+      "status": "down"
+    },
+    {
+      "tick_processed": 16,
+      "status": "down"
+    }
+  ],
+  "failed_link_signal": {
+    "reported_link_latency": 5.0,
+    "service_p95": 0.0,
+    "service_drop_rate": 1.0,
+    "tool_output": {
+      "id": "l_gw_edge0",
+      "latency_ms": 5.0,
+      "status": "down",
+      "endpoints": [
+        "gw0",
+        "edge0"
+      ]
+    }
+  },
+  "tool_budget_exhaustion": {
+    "action": {
+      "type": "no_op"
+    },
+    "trace": {
+      "prompt_version": "v1",
+      "tools_called": [
+        "get_topology",
+        "get_topology",
+        "get_topology",
+        "get_topology"
+      ],
+      "reasoning": [],
+      "steps": 4,
+      "malformed": 0,
+      "rejected": 0,
+      "exhausted": true,
+      "action_type": "no_op",
+      "feedback_present": false,
+      "feedback_changed": null
+    }
+  },
+  "four_tools_then_action": [
+    {
+      "budget": 4,
+      "calls": 4,
+      "action": "no_op",
+      "exhausted": true
+    },
+    {
+      "budget": 5,
+      "calls": 5,
+      "action": "restart_service",
+      "exhausted": false
+    }
+  ],
+  "cpu_allocation": {
+    "before": {
+      "svc0": 50.0,
+      "svc4": 50.0
+    },
+    "after_scale": {
+      "svc0": 66.66666666666667,
+      "svc4": 33.333333333333336
+    },
+    "neighbor_down": {
+      "svc0": 66.66666666666667,
+      "svc4": 33.333333333333336
+    },
+    "alone_before_scale": {
+      "svc0": 100.0
+    },
+    "alone_after_scale": {
+      "svc0": 100.0
+    }
+  },
+  "zero_arrival_crash_with_backlog": {
+    "p95": 0.0,
+    "throughput": 0.0,
+    "drop_rate": 0.0,
+    "slo_compliant": true
+  },
+  "fidelity_mapping": {
+    "0.0": {
+      "fidelity": 0.0,
+      "sigma_obs": 0.3,
+      "lag_ticks": 12,
+      "simplify_queueing": true,
+      "drift_pct": 0.3,
+      "forecast_err": 0.4,
+      "horizon_ticks": 30,
+      "tolerance_margin": 0.0
+    },
+    "0.8": {
+      "fidelity": 0.8,
+      "sigma_obs": 0.059999999999999984,
+      "lag_ticks": 2,
+      "simplify_queueing": false,
+      "drift_pct": 0.059999999999999984,
+      "forecast_err": 0.07999999999999999,
+      "horizon_ticks": 30,
+      "tolerance_margin": 0.0
+    },
+    "1.0": {
+      "fidelity": 1.0,
+      "sigma_obs": 0.0,
+      "lag_ticks": 0,
+      "simplify_queueing": false,
+      "drift_pct": 0.0,
+      "forecast_err": 0.0,
+      "horizon_ticks": 30,
+      "tolerance_margin": 0.0
+    }
+  },
+  "saved_sweep_counts": {
+    "total_rows": 1682,
+    "by_arm": {
+      "A0": {
+        "rows": 900,
+        "actions": {
+          "no_op": 900
+        }
+      },
+      "A1": {
+        "rows": 360,
+        "actions": {
+          "no_op": 328,
+          "restart_service": 7,
+          "scale_service": 23,
+          "migrate_service": 2
+        }
+      },
+      "A2": {
+        "rows": 60,
+        "actions": {
+          "no_op": 42,
+          "restart_service": 17,
+          "scale_service": 1
+        }
+      },
+      "A3": {
+        "rows": 300,
+        "actions": {
+          "no_op": 300
+        }
+      },
+      "A4": {
+        "rows": 62,
+        "actions": {
+          "no_op": 58,
+          "restart_service": 3,
+          "scale_service": 1
+        }
+      }
+    }
+  }
+}

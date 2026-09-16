@@ -1,0 +1,98 @@
+{
+  "control": "passed",
+  "real_source_and_tests_unchanged": true,
+  "mutations": [
+    {
+      "mutation": "missing_latency_zero",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_no_completions_are_missing_not_zero_latency[4-False]",
+          "message": "assert (None is None and 0.0 is None)"
+        },
+        {
+          "test": "test_no_completions_are_missing_not_zero_latency[0-False]",
+          "message": "assert (None is None and 0.0 is None)"
+        },
+        {
+          "test": "test_no_completions_are_missing_not_zero_latency[0-True]",
+          "message": "assert (None is None and 0.0 is None)"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mutation": "migration_route_omitted",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_exact_migration_probe_and_live_placement_tools",
+          "message": "AssertionError: assert ['l_gw_dev0', 'l_gw_edge0'] == ['l_gw_dev0', 'l_gw_edge1']\n  \n  At index 1 diff: 'l_gw_edge0' != 'l_gw_edge1'\n  Use -v to get more diff"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mutation": "overlap_restores_health_early",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_exact_overlapping_crashes_union[False]",
+          "message": "AssertionError: assert ['down', 'dow..., 'down', ...] == ['down', 'dow..., 'down', ...]\n  \n  At index 10 diff: 'healthy' != 'down'\n  Use -v to get more diff"
+        },
+        {
+          "test": "test_exact_overlapping_crashes_union[True]",
+          "message": "AssertionError: assert ['down', 'dow..., 'down', ...] == ['down', 'dow..., 'down', ...]\n  \n  At index 10 diff: 'healthy' != 'down'\n  Use -v to get more diff"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mutation": "action_losses_omitted",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_pending_losses_snapshot_restore_count_exactly_once[restart]",
+          "message": "assert 0 == 3"
+        },
+        {
+          "test": "test_pending_losses_snapshot_restore_count_exactly_once[migration]",
+          "message": "assert 0 == 3"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mutation": "downtime_one_tick_short",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_exact_processing_downtime[action0-3]",
+          "message": "assert 20 == 0"
+        },
+        {
+          "test": "test_exact_processing_downtime[action1-10]",
+          "message": "assert 29 == 0"
+        }
+      ],
+      "errors": []
+    },
+    {
+      "mutation": "tool_exhaustion_mislabeled_hold",
+      "status": "killed",
+      "exit_code": 1,
+      "failures": [
+        {
+          "test": "test_matched_budget_outcomes[replies4-tool_budget_exhausted-4-3-NoOp]",
+          "message": "AssertionError: assert 'deliberate_no_op' == 'tool_budget_exhausted'\n  \n  - tool_budget_exhausted\n  + deliberate_no_op"
+        }
+      ],
+      "errors": []
+    }
+  ]
+}

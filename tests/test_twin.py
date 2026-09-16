@@ -24,7 +24,10 @@ def _mean(values):
 
 
 def _mean_p95(metrics):
-    return [_mean(m.service_p95.values()) for m in metrics]
+    # Missing completion latency is not zero; compare observed samples only.
+    observed = [[v for v in m.service_p95.values() if v is not None] for m in metrics]
+    assert all(observed), "latency error requires at least one completed sample per tick"
+    return [_mean(values) for values in observed]
 
 
 def _mae(left, right):
@@ -169,6 +172,8 @@ def test_each_fidelity_axis_degrades_accuracy(tmp_path):
 
 
 def test_scalar_fidelity_sweep_is_monotonic(tmp_path):
+    # An empirical regression on this fixture and these seeds, not a universal
+    # monotonicity property of stochastic prediction or gate effectiveness.
     seeds = range(6)
 
     def _error(fidelity):

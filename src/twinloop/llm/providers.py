@@ -29,6 +29,31 @@ def estimate_tokens(text: str) -> int:
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 
 
+def _request_json(request, timeout, max_attempts):
+    """Retries and backoff share the caller's remaining time allowance."""
+    deadline = time.monotonic() + timeout
+    for attempt in range(max_attempts):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("provider deadline reached")
+        try:
+            with urllib.request.urlopen(request, timeout=remaining) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as error:
+            if error.code not in _RETRYABLE_STATUS or attempt == max_attempts - 1:
+                raise
+        except urllib.error.URLError as error:
+            if isinstance(error.reason, TimeoutError):
+                raise TimeoutError("provider request timed out") from error
+            if attempt == max_attempts - 1:
+                raise
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise TimeoutError("provider deadline reached")
+        time.sleep(min(2**attempt, remaining))
+    raise RuntimeError("provider retries exhausted")
+
+
 class OpenAICompatibleProvider:
     def __init__(
         self, base_url: str, api_key: Optional[str] = None, max_attempts: int = 4
@@ -53,30 +78,14 @@ class OpenAICompatibleProvider:
             method="POST",
         )
 
-        for attempt in range(self.max_attempts):
-            try:
-                with urllib.request.urlopen(request, timeout=timeout) as response:
-                    data = json.loads(response.read().decode("utf-8"))
-                text = data["choices"][0]["message"]["content"]
-                usage = data.get("usage", {})
-                tokens_in = usage.get(
-                    "prompt_tokens", estimate_tokens(json.dumps(messages))
-                )
-                tokens_out = usage.get("completion_tokens", estimate_tokens(text))
-                return ProviderResponse(
-                    text=text, tokens_in=tokens_in, tokens_out=tokens_out
-                )
-            except urllib.error.HTTPError as error:
-                if error.code in _RETRYABLE_STATUS and attempt < self.max_attempts - 1:
-                    time.sleep(2**attempt)
-                    continue
-                raise
-            except urllib.error.URLError:
-                if attempt < self.max_attempts - 1:
-                    time.sleep(2**attempt)
-                    continue
-                raise
-        raise RuntimeError("provider retries exhausted")
+        data = _request_json(request, timeout, self.max_attempts)
+        text = data["choices"][0]["message"]["content"]
+        usage = data.get("usage", {})
+        return ProviderResponse(
+            text=text,
+            tokens_in=usage.get("prompt_tokens", estimate_tokens(json.dumps(messages))),
+            tokens_out=usage.get("completion_tokens", estimate_tokens(text)),
+        )
 
 
 class CloudProvider(OpenAICompatibleProvider):
@@ -131,23 +140,11 @@ class GeminiProvider:
             headers["x-goog-api-key"] = self.api_key
         request = urllib.request.Request(url, data=body, headers=headers, method="POST")
 
-        for attempt in range(self.max_attempts):
-            try:
-                with urllib.request.urlopen(request, timeout=timeout) as response:
-                    data = json.loads(response.read().decode("utf-8"))
-                text = _gemini_text(data)
-                usage = data.get("usageMetadata", {})
-                tokens_in = usage.get("promptTokenCount", estimate_tokens(body.decode("utf-8")))
-                tokens_out = usage.get("candidatesTokenCount", estimate_tokens(text))
-                return ProviderResponse(text=text, tokens_in=tokens_in, tokens_out=tokens_out)
-            except urllib.error.HTTPError as error:
-                if error.code in _RETRYABLE_STATUS and attempt < self.max_attempts - 1:
-                    time.sleep(2**attempt)
-                    continue
-                raise
-            except urllib.error.URLError:
-                if attempt < self.max_attempts - 1:
-                    time.sleep(2**attempt)
-                    continue
-                raise
-        raise RuntimeError("provider retries exhausted")
+        data = _request_json(request, timeout, self.max_attempts)
+        text = _gemini_text(data)
+        usage = data.get("usageMetadata", {})
+        return ProviderResponse(
+            text=text,
+            tokens_in=usage.get("promptTokenCount", estimate_tokens(body.decode("utf-8"))),
+            tokens_out=usage.get("candidatesTokenCount", estimate_tokens(text)),
+        )

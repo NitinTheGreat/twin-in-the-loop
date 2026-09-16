@@ -117,12 +117,23 @@ def test_trajectory_non_perturbation(tmp_path):
     ]
 
 
-def test_fault_schedule_identical_across_arms(tmp_path):
-    config = _config(tmp_path)
+def test_fault_schedule_identical_across_arms(tmp_path, monkeypatch):
+    config = _config(tmp_path, episode_ticks=1, horizon=1, seeds=(3,), fids=(1.0,))
     targets = targets_from_topology(build_topology(config.topology, config.sim))
-    schedules = [
-        FaultSchedule.generate(3, config.fault, targets).events for _ in range(5)
-    ]
+    schedules = []
+    seeds = []
+
+    def capture_sim(topology, sim_config, seed, schedule):
+        schedules.append(list(schedule.events))
+        seeds.append(seed)
+        return NetworkSim(topology, sim_config, seed, schedule)
+
+    monkeypatch.setattr("twinloop.experiment.runner.NetworkSim", capture_sim)
+    for run in expand_runs(default_arms(config), [3], [1.0]):
+        run_single(config, run, tmp_path / run.arm_id, _fake_factory(),
+                   BudgetGuard(100, 10000), ResponseCache(tmp_path / f"{run.arm_id}.json"),
+                   False, MemorySaver())
+    assert seeds == [3] * 5
     for events in schedules[1:]:
         assert events == schedules[0]
     assert FaultSchedule.generate(3, config.fault, targets).events != FaultSchedule.generate(

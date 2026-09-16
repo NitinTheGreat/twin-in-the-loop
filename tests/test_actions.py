@@ -70,11 +70,13 @@ def test_no_op_changes_nothing():
 
 
 def test_reroute_mutates_route():
-    sim = NetworkSim(build_topology(TopologyConfig(), SimConfig()), SimConfig(), seed=1)
-    action = RerouteTraffic(service_id="svc2", path_hint=["l_gw_dev0", "l_gw_edge2"])
+    sim = NetworkSim(build_topology(TopologyConfig(redundant_links=True), SimConfig()), SimConfig(), seed=1)
+    path = ["l_gw_dev2", "l_gw_edge1", "l_redundant_edge1_edge2"]
+    action = RerouteTraffic(service_id="svc2", path_hint=path)
     assert validate_action(action, sim.state, ActionsConfig()).valid
+    assert sim.state.routes["svc2"] != path
     execute_action(sim, action, ActionsConfig())
-    assert sim.state.routes["svc2"] == ["l_gw_dev0", "l_gw_edge2"]
+    assert sim.state.routes["svc2"] == path
 
 
 def test_migration_downtime_then_improvement():

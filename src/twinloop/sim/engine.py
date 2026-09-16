@@ -11,6 +11,8 @@ from ..faults.injector import FaultInjector
 from ..seeding import SeedManager
 from .link import Link
 from .metrics import TickMetrics
+from .routing import path_error, route_to
+from ..faults.catalog import reset_leak_memory
 from .node import Node
 from .service import Request, Service, process_queue
 from .state import PendingEffect, SimState
@@ -39,6 +41,9 @@ def _copy_service(service: Service) -> Service:
         else None,
         baseline_mem=service.baseline_mem,
         rate_limit=service.rate_limit,
+        source_node_id=service.source_node_id,
+        pending_request_losses=service.pending_request_losses,
+        total_request_losses=service.total_request_losses,
     )
 
 
@@ -59,7 +64,8 @@ def _copy_entities(state: SimState) -> SimState:
         services={sid: _copy_service(s) for sid, s in state.services.items()},
         routes={sid: list(path) for sid, path in state.routes.items()},
         workloads={sid: w.copy() for sid, w in state.workloads.items()},
-        active_faults={i: dict(saved) for i, saved in state.active_faults.items()},
+        active_faults=copy.deepcopy(state.active_faults),
+        fault_baselines=copy.deepcopy(state.fault_baselines),
         pending=[_copy_pending(e) for e in state.pending],
     )
 
@@ -77,6 +83,12 @@ class Topology:
     services: list[Service]
     routes: dict[str, list[str]]
     workloads: dict[str, Workload]
+
+    def __post_init__(self):
+        for collection in (self.nodes, self.links, self.services):
+            identifiers = [obj.id for obj in collection]
+            if len(identifiers) != len(set(identifiers)):
+                raise ValueError("duplicate topology identifiers")
 
 
 def build_topology(
@@ -143,6 +155,16 @@ def build_topology(
             )
         )
 
+    if topology_config.redundant_links:
+        # Edge mesh supplies host-link detours; dual-homed clients supply access detours.
+        pairs = [(a.id, b.id) for i, a in enumerate(edges) for b in edges[i + 1:]]
+        pairs += [(device.id, edges[i % len(edges)].id) for i, device in enumerate(devices)]
+        for a, b in pairs:
+            links.append(Link(f"l_redundant_{a}_{b}", (a, b),
+                              sim_config.default_link_bandwidth,
+                              sim_config.default_base_latency_ms,
+                              sim_config.default_base_latency_ms))
+
     for s in range(topology_config.n_services):
         host = edges[s % len(edges)]
         service = Service(
@@ -153,6 +175,7 @@ def build_topology(
         )
         services.append(service)
         source = devices[s % len(devices)]
+        service.source_node_id = source.id
         routes[service.id] = [f"l_gw_{source.id}", f"l_gw_{host.id}"]
         workloads[service.id] = PoissonWorkload(rate=arrival_rate)
 
@@ -174,6 +197,7 @@ class NetworkSim:
         schedule=None,
     ) -> None:
         self.config = config
+        topology.__post_init__()
         self.topology = topology
         self.seed_manager = SeedManager(seed)
 
@@ -187,6 +211,7 @@ class NetworkSim:
                 mem_footprint=s.mem_footprint,
                 replicas=s.replicas,
                 baseline_mem=s.baseline_mem if s.baseline_mem > 0 else s.mem_footprint,
+                source_node_id=s.source_node_id or self._infer_source(topology, s.id),
             )
             for s in topology.services
         }
@@ -211,6 +236,15 @@ class NetworkSim:
         }
         self._routing_stream = self.seed_manager.stream("routing")
 
+    @staticmethod
+    def _infer_source(topology, sid):
+        route = topology.routes[sid]
+        if not route:
+            return next(s.host_node_id for s in topology.services if s.id == sid)
+        endpoints = next(link.endpoints for link in topology.links if link.id == route[0])
+        devices = {n.id for n in topology.nodes if n.role == "device"}
+        return next((n for n in endpoints if n in devices), endpoints[0])
+
     def _allocated_cpu(self, service: Service) -> float:
         node = self.state.nodes[service.host_node_id]
         total_replicas = sum(
@@ -227,11 +261,13 @@ class NetworkSim:
             if effect.remaining <= 1:
                 service = self.state.services[effect.service_id]
                 if effect.kind == "migrate":
-                    service.host_node_id = effect.target_node_id
+                    path = route_to(self.state, service.id, effect.target_node_id)
+                    if path is not None and self.state.nodes[effect.target_node_id].status != "down":
+                        service.host_node_id = effect.target_node_id
+                        self.state.routes[service.id] = path
+                    # If connectivity disappeared in transit, retain old placement/route.
                 if effect.kind == "restart":
-                    service.mem_footprint = service.baseline_mem
-                service.queue.clear()
-                service.in_service = None
+                    reset_leak_memory(self.state, service.id)
                 service.status = "healthy"
             else:
                 effect.remaining -= 1
@@ -241,6 +277,10 @@ class NetworkSim:
     def _route_delay_and_loss(self, service_id: str) -> tuple[float, float]:
         delay_ms = 0.0
         survival = 1.0
+        service = self.state.services[service_id]
+        if path_error(self.state, self.state.routes.get(service_id, []),
+                      service.source_node_id, service.host_node_id):
+            return 0.0, 1.0
         for link_id in self.state.routes.get(service_id, []):
             link = self.state.links[link_id]
             if link.status != "up":
@@ -256,7 +296,15 @@ class NetworkSim:
         if self._injector is not None:
             self._injector.apply_tick(self.state.tick, self.state)
 
-        self._advance_pending_effects()
+        for link in self.state.links.values():
+            link.current_latency_ms = link.base_latency_ms * link.latency_multiplier
+
+        outstanding_before = {sid: len(s.queue) + int(s.in_service is not None)
+                              + s.pending_request_losses
+                              for sid, s in self.state.services.items()}
+        memory_used = {nid: sum(s.mem_footprint * max(s.replicas, 1)
+                               for s in self.state.services.values() if s.host_node_id == nid)
+                       for nid in self.state.nodes}
 
         arrivals: dict[str, list[Request]] = {}
         arrived_counts: dict[str, int] = {}
@@ -266,14 +314,17 @@ class NetworkSim:
             arrived_counts[sid] = count
             admitted = count
             if service.rate_limit is not None:
-                cap = int(service.rate_limit * tau)
+                cap = int(min(count, service.rate_limit * tau))
                 admitted = min(count, cap)
             throttle_dropped[sid] = count - admitted
             arrivals[sid] = [Request(arrival_time=tick_start) for _ in range(admitted)]
 
         dropped_counts: dict[str, int] = {
-            sid: throttle_dropped[sid] for sid in self.state.services
+            sid: throttle_dropped[sid] + service.pending_request_losses
+            for sid, service in self.state.services.items()
         }
+        for service in self.state.services.values():
+            service.pending_request_losses = 0
         for sid, service in self.state.services.items():
             delay, loss = self._route_delay_and_loss(sid)
             for request in arrivals[sid]:
@@ -287,8 +338,11 @@ class NetworkSim:
         work_done: dict[str, float] = {}
         for sid, service in self.state.services.items():
             node = self.state.nodes[service.host_node_id]
-            if node.status == "down" or service.status == "down":
-                dropped_counts[sid] += len(service.queue)
+            # Hard memory-capacity pressure: all requests on an over-capacity host fail.
+            # Restart reclaims memory; the scheduled leak may grow again.
+            if (node.status == "down" or service.status == "down"
+                    or memory_used[node.id] > node.mem_capacity):
+                dropped_counts[sid] += len(service.queue) + int(service.in_service is not None)
                 service.queue.clear()
                 service.in_service = None
                 completed[sid] = []
@@ -322,21 +376,32 @@ class NetworkSim:
             responses = completed[sid]
             if responses:
                 array = np.array(responses, dtype=float)
-                metrics.service_p50[sid] = float(np.percentile(array, 50))
-                metrics.service_p95[sid] = float(np.percentile(array, 95))
+                p50, p95 = np.percentile(array, [50, 95])
+                metrics.service_p50[sid] = float(p50)
+                metrics.service_p95[sid] = float(p95)
             else:
-                metrics.service_p50[sid] = 0.0
-                metrics.service_p95[sid] = 0.0
+                metrics.service_p50[sid] = None
+                metrics.service_p95[sid] = None
             metrics.service_throughput[sid] = len(responses) / tau
-            arrived = arrived_counts[sid]
-            metrics.service_drop_rate[sid] = (
-                dropped_counts[sid] / arrived if arrived > 0 else 0.0
-            )
+            at_risk = outstanding_before[sid] + arrived_counts[sid]
+            metrics.service_drop_rate[sid] = dropped_counts[sid] / at_risk if at_risk else 0.0
+            metrics.service_arrivals[sid] = arrived_counts[sid]
+            metrics.service_dropped[sid] = dropped_counts[sid]
+            metrics.service_completed[sid] = len(responses)
+            metrics.service_outstanding[sid] = len(service.queue) + int(service.in_service is not None)
             metrics.service_queue_len[sid] = len(service.queue)
         for nid, node in self.state.nodes.items():
             metrics.node_utilisation[nid] = (
                 node.cpu_used / node.cpu_capacity if node.cpu_capacity > 0 else 0.0
             )
+        self._advance_pending_effects()
+        # Placement and memory are end-of-tick state, as exposed to controller tools.
+        # Throughput, latency and CPU still describe work during this tick.
+        for nid, node in self.state.nodes.items():
+            node.mem_used = sum(s.mem_footprint * max(s.replicas, 1)
+                                for s in self.state.services.values() if s.host_node_id == nid)
+            metrics.node_memory_utilisation[nid] = node.mem_used / node.mem_capacity if node.mem_capacity else 0.0
+        metrics.service_hosts = {sid: s.host_node_id for sid, s in self.state.services.items()}
         for lid, link in self.state.links.items():
             metrics.link_latency[lid] = link.current_latency_ms
 
