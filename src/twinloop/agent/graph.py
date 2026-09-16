@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, TypedDict
@@ -160,6 +161,7 @@ def build_graph(runtime: GraphRuntime, config, gate_enabled: bool, checkpointer)
                 "retry_index": len(runtime.proposals),
                 "verdict": None,
                 "was_applied": False,
+                "decision_trace": deepcopy(getattr(runtime.agent, "last_trace", {})),
             }
         )
         return {"proposal": _action_dict(action)}
@@ -216,6 +218,9 @@ def build_graph(runtime: GraphRuntime, config, gate_enabled: bool, checkpointer)
             "retries": state.get("retry_count", 0),
             "rejections": state.get("rejections", 0),
             "exhausted": state.get("exhausted", False),
+            "decision_outcome": runtime.proposals[-1]["decision_trace"].get("outcome"),
+            "decision_fallback": runtime.proposals[-1]["decision_trace"].get("fallback", False),
+            "proposal_traces": [p["decision_trace"] for p in runtime.proposals],
             "action_cost": runtime.result.cost if runtime.result is not None else 0.0,
         }
         return {"record": record}

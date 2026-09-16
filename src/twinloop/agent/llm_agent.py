@@ -4,12 +4,15 @@ import json
 import time
 from pathlib import Path
 from typing import Optional
+from urllib.error import URLError
 
 from ..actions.schema import NoOp, ParseError, parse_action
 from ..actions.validator import ValidationResult, validate_action
 from ..config import ActionsConfig, LLMConfig, SLOConfig
 from ..llm.structured import extract_json
+from ..llm.budget import BudgetExceeded
 from ..telemetry.summarizer import Summarizer
+from ..sim.metrics import latency_ms
 from .base import DecisionContext, TwinFeedback
 
 
@@ -86,6 +89,9 @@ class LLMAgent:
             "status": node.status,
             "cpu_capacity": node.cpu_capacity,
             "mem_capacity": node.mem_capacity,
+            "memory_utilisation": obs.metrics.node_memory_utilisation.get(node_id),
+            "service_memory": {s.id: s.mem_footprint * max(s.replicas, 1)
+                               for s in state.services.values() if s.host_node_id == node_id},
             "services": [
                 s.id for s in state.services.values() if s.host_node_id == node_id
             ],
@@ -97,7 +103,7 @@ class LLMAgent:
         history = [
             {
                 "tick": m.tick,
-                "p95_ms": m.service_p95.get(service_id, 0.0) * 1000.0,
+                "p95_ms": latency_ms(m.service_p95.get(service_id)),
                 "throughput": m.service_throughput.get(service_id, 0.0),
                 "drop_rate": m.service_drop_rate.get(service_id, 0.0),
                 "queue_len": m.service_queue_len.get(service_id, 0),
@@ -160,125 +166,103 @@ class LLMAgent:
 
     def decide(self, obs, feedback: Optional[TwinFeedback] = None):
         messages = self._build_messages(obs, feedback)
-        rejected_action = (
-            self._last_proposed
-            if feedback is not None and not feedback.approved
-            else None
-        )
-        tools_called: list[str] = []
-        reasoning: list[str] = []
-        malformed = 0
-        rejected = 0
-        exhausted = False
+        rejected_action = self._last_proposed if feedback is not None and not feedback.approved else None
+        tools_called, reasoning = [], []
+        malformed = rejected = steps = 0
         action = None
-        steps = 0
-        start = time.perf_counter()
+        outcome = "final_parse_failure"
+        final_call = False
+        deadline = time.perf_counter() + self.config.react_timeout_seconds
+        reserve = self.config.react_timeout_seconds * self.config.react_final_reserve_fraction
 
-        for _ in range(self.config.react_max_steps):
-            if time.perf_counter() - start > self.config.react_timeout_seconds:
-                exhausted = True
+        for index in range(self.config.react_max_steps):
+            remaining = deadline - time.perf_counter()
+            if remaining <= 0:
+                outcome = "timeout"
                 break
+            final_call = (
+                index == self.config.react_max_steps - 1
+                or remaining <= reserve
+                or malformed + rejected > self.config.max_retries
+            )
+            if final_call:
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        'FINAL DECISION: tools are disabled. Use all evidence above and return '
+                        'one JSON object {"action": {...}} using the action schema. '
+                        'An intentional no_op is permitted. Do not request another tool.'
+                    ),
+                })
+            timeout = remaining if final_call else remaining - reserve
             steps += 1
-            text, _ = self.client.complete(messages)
-            payload = extract_json(text)
+            try:
+                text, _ = self.client.complete(messages, timeout_seconds=timeout)
+            except BudgetExceeded:
+                outcome = "provider_budget_exhausted"
+                break
+            except TimeoutError:
+                outcome = "timeout"
+                break
+            except URLError as error:
+                outcome = "timeout" if isinstance(error.reason, TimeoutError) else "provider_error"
+                break
 
+            # A provider that returns after its deadline cannot produce an on-time decision.
+            if time.perf_counter() >= deadline:
+                outcome = "timeout"
+                break
+            payload = extract_json(text)
+            if payload is not None and "thought" in payload:
+                reasoning.append(str(payload["thought"]))
+            message = "Reply with a single JSON tool call or action object."
             if payload is None:
                 malformed += 1
-                messages.append({"role": "assistant", "content": text})
-                messages.append(
-                    {
-                        "role": "user",
-                        "content": "Your response was not valid JSON. Reply with a single JSON tool call or action object.",
-                    }
-                )
-                if malformed + rejected > self.config.max_retries:
-                    exhausted = True
+                outcome = "final_parse_failure"
+                message = "Your response was not valid JSON. " + message
+            elif "tool" in payload:
+                if final_call:
+                    outcome = "tool_budget_exhausted"
                     break
-                continue
-
-            if "thought" in payload:
-                reasoning.append(str(payload.get("thought", "")))
-
-            if "tool" in payload:
                 name = payload["tool"]
                 args = payload.get("tool_input", {}) or {}
-                result = self._run_tool(name, args, obs)
-                tools_called.append(name)
-                messages.append({"role": "assistant", "content": text})
-                messages.append(
-                    {"role": "user", "content": f"TOOL RESULT {name}: {json.dumps(result)}"}
-                )
-                continue
-
-            if "action" in payload:
+                if not isinstance(name, str) or not isinstance(args, dict):
+                    malformed += 1
+                    outcome = "final_parse_failure"
+                    message = "Tool name must be a string and tool_input must be an object."
+                else:
+                    result = self._run_tool(name, args, obs)
+                    tools_called.append(name)
+                    message = f"TOOL RESULT {name}: {json.dumps(result)}"
+            elif "action" in payload:
                 parsed = parse_action(payload["action"])
                 if isinstance(parsed, ParseError):
                     malformed += 1
-                    messages.append({"role": "assistant", "content": text})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": f"That action failed schema parsing: {parsed.message}. Reply with a valid JSON action object.",
-                        }
-                    )
-                    if malformed + rejected > self.config.max_retries:
-                        exhausted = True
-                        break
-                    continue
+                    outcome = "final_parse_failure"
+                    message = f"That action failed schema parsing: {parsed.message}. Reply with a valid JSON action object."
+                else:
+                    verdict = self._validate(parsed)
+                    if not verdict.valid or (rejected_action is not None and parsed == rejected_action):
+                        rejected += 1
+                        outcome = "validation_exhausted"
+                        reason = verdict.reason if not verdict.valid else "same action already rejected"
+                        message = f"That action was rejected by the validator: {reason}. Choose a different, valid action."
+                    else:
+                        action = parsed
+                        outcome = "deliberate_no_op" if isinstance(action, NoOp) else "decision_produced"
+            else:
+                malformed += 1
+                outcome = "final_parse_failure"
 
-                verdict = self._validate(parsed)
-                if not verdict.valid:
-                    rejected += 1
-                    messages.append({"role": "assistant", "content": text})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": f"That action was rejected by the validator: {verdict.reason}. Choose a different, valid action.",
-                        }
-                    )
-                    if malformed + rejected > self.config.max_retries:
-                        exhausted = True
-                        break
-                    continue
-
-                if rejected_action is not None and parsed == rejected_action:
-                    rejected += 1
-                    messages.append({"role": "assistant", "content": text})
-                    messages.append(
-                        {
-                            "role": "user",
-                            "content": "That is the same action already rejected. Choose a different action.",
-                        }
-                    )
-                    if malformed + rejected > self.config.max_retries:
-                        exhausted = True
-                        break
-                    continue
-
-                action = parsed
+            if action is not None or final_call:
                 break
-
-            malformed += 1
             messages.append({"role": "assistant", "content": text})
-            messages.append(
-                {
-                    "role": "user",
-                    "content": "Respond with either a tool call or a final action as JSON.",
-                }
-            )
-            if malformed + rejected > self.config.max_retries:
-                exhausted = True
-                break
+            messages.append({"role": "user", "content": message})
 
-        if action is None:
-            exhausted = True
+        fallback = action is None
+        if fallback:
             action = NoOp()
-
         self._last_proposed = action
-        feedback_changed = None
-        if rejected_action is not None:
-            feedback_changed = action != rejected_action
-
         self.last_trace = {
             "prompt_version": self.prompt_version,
             "tools_called": tools_called,
@@ -286,9 +270,12 @@ class LLMAgent:
             "steps": steps,
             "malformed": malformed,
             "rejected": rejected,
-            "exhausted": exhausted,
-            "action_type": getattr(action, "type", "no_op"),
+            "exhausted": fallback,
+            "fallback": fallback,
+            "outcome": outcome,
+            "final_call": final_call,
+            "action_type": action.type,
             "feedback_present": feedback is not None,
-            "feedback_changed": feedback_changed,
+            "feedback_changed": action != rejected_action if rejected_action is not None else None,
         }
         return action

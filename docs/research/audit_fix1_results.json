@@ -1,0 +1,313 @@
+[
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 151,
+    "hold_violation_ticks": 145,
+    "best_violation_ticks": 95,
+    "benefit_vs_hold": 50,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc0",
+          "target_node_id": "gw0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 10,
+      "svc1": 9,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 60,
+      "svc5": 16
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "node_cpu_saturation",
+    "fault_target": "edge0",
+    "fault_magnitude": 4.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 1,
+    "seed": 0
+  },
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 147,
+    "hold_violation_ticks": 145,
+    "best_violation_ticks": 95,
+    "benefit_vs_hold": 50,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc0",
+          "target_node_id": "gw0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 10,
+      "svc1": 9,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 60,
+      "svc5": 16
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "node_crash",
+    "fault_target": "edge0",
+    "fault_magnitude": 1.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 1,
+    "seed": 0
+  },
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 151,
+    "hold_violation_ticks": 145,
+    "best_violation_ticks": 95,
+    "benefit_vs_hold": 50,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc0",
+          "target_node_id": "gw0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 10,
+      "svc1": 9,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 60,
+      "svc5": 16
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "link_degradation",
+    "fault_target": "l_gw_edge0",
+    "fault_magnitude": 3.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 1,
+    "seed": 0
+  },
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 147,
+    "hold_violation_ticks": 145,
+    "best_violation_ticks": 95,
+    "benefit_vs_hold": 50,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc0",
+          "target_node_id": "gw0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 10,
+      "svc1": 9,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 60,
+      "svc5": 16
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "link_failure",
+    "fault_target": "l_gw_edge0",
+    "fault_magnitude": 1.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 1,
+    "seed": 0
+  },
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 133,
+    "hold_violation_ticks": 107,
+    "best_violation_ticks": 55,
+    "benefit_vs_hold": 52,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "restart_service",
+          "service_id": "svc0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 15,
+      "svc1": 15,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 11,
+      "svc5": 14
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "service_memory_leak",
+    "fault_target": "svc0",
+    "fault_magnitude": 2.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 40,
+    "seed": 0
+  },
+  {
+    "diagnostic_only": true,
+    "information": "PRIVILEGED: exact state, scheduled faults, cloned RNG",
+    "objective": "fixed-horizon service-violation-ticks; hold continuation",
+    "horizon": 60,
+    "max_depth": 1,
+    "sequence_interval": 10,
+    "throttle_fractions": [
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "candidates_evaluated": 151,
+    "hold_violation_ticks": 94,
+    "best_violation_ticks": 79,
+    "benefit_vs_hold": 15,
+    "beneficial_opportunity": true,
+    "best_sequence": [
+      {
+        "offset": 0,
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc0",
+          "target_node_id": "gw0"
+        }
+      }
+    ],
+    "best_service_violation_ticks": {
+      "svc0": 52,
+      "svc1": 9,
+      "svc2": 0,
+      "svc3": 0,
+      "svc4": 2,
+      "svc5": 16
+    },
+    "reroute_feasibility": {
+      "svc0": "topology-infeasible",
+      "svc1": "topology-infeasible",
+      "svc2": "topology-infeasible",
+      "svc3": "topology-infeasible",
+      "svc4": "topology-infeasible",
+      "svc5": "topology-infeasible"
+    },
+    "fault_type": "traffic_surge",
+    "fault_target": "svc0",
+    "fault_magnitude": 3.0,
+    "fault_start": 0,
+    "fault_duration": 80,
+    "decision_tick": 1,
+    "seed": 0
+  }
+]

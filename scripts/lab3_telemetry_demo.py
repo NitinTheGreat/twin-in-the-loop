@@ -5,6 +5,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from twinloop.sim.metrics import latency_ms, mean_latency, display_latency
 from twinloop.config import SimConfig, SLOConfig, TopologyConfig
 from twinloop.faults.catalog import FAULT_TYPES
 from twinloop.faults.schedule import FaultEvent, FaultSchedule
@@ -61,7 +62,7 @@ def main() -> None:
             print("GROUND TRUTH (hidden): no active fault")
         print(
             "raw sample: "
-            f"svc2 p95={metrics.service_p95['svc2'] * 1000:.0f}ms thr={metrics.service_throughput['svc2']:.0f}rps | "
+            f"svc2 p95={display_latency(latency_ms(metrics.service_p95['svc2']))} thr={metrics.service_throughput['svc2']:.0f}rps | "
             f"edge0 util={metrics.node_utilisation['edge0'] * 100:.0f}% | "
             f"l_gw_edge0 lat={metrics.link_latency['l_gw_edge0']:.0f}ms"
         )

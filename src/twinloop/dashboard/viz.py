@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..sim.metrics import latency_ms, mean_latency, display_latency, rounded_latency
+
 import math
 
 import plotly.graph_objects as go
@@ -135,7 +137,7 @@ def network_figure(view, tick_index):
         compliant = snapshot.service_compliant.get(sid, True)
         scolor.append(HEALTHY if compliant else BAD)
         stext.append(
-            f"{sid} on {snapshot.service_host.get(sid)}<br>p95 {snapshot.service_p95_ms.get(sid, 0):.0f} ms"
+            f"{sid} on {snapshot.service_host.get(sid)}<br>p95 {display_latency(snapshot.service_p95_ms.get(sid))}"
             f"<br>drop {snapshot.service_drop.get(sid, 0) * 100:.0f}%<br>{'within SLO' if compliant else 'SLO VIOLATION'}"
         )
     fig.add_trace(
@@ -188,7 +190,7 @@ def _fault_spans(view):
 def metrics_figure(view, current_tick=None):
     ticks = [t.tick for t in view.ticks]
     mean_p95 = [
-        (sum(t.service_p95_ms.values()) / len(t.service_p95_ms)) if t.service_p95_ms else 0.0
+        mean_latency(t.service_p95_ms.values())
         for t in view.ticks
     ]
     edge_ids = [nid for nid, role in view.nodes if role == "edge"]

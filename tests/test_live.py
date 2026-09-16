@@ -9,6 +9,12 @@ from twinloop.dashboard.live import provider_status, run_stream
 SHORT = dict(seed=15, ticks=30, interval=10, horizon=12)
 
 
+@pytest.fixture(autouse=True)
+def isolated_live_cache(tmp_path, monkeypatch):
+    # Cached model replies from earlier runs must not replace this test's provider.
+    monkeypatch.chdir(tmp_path)
+
+
 def collect(**kwargs):
     return list(run_stream(**{**SHORT, **kwargs}))
 

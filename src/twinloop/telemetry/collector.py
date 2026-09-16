@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from ..config import SLOConfig
 from ..sim.metrics import TickMetrics
@@ -52,6 +52,8 @@ class Collector:
         self._history: deque = deque(maxlen=config.history_window)
 
     def observe(self, metrics: TickMetrics) -> Observation:
+        if metrics.service_hosts:
+            self.topology = replace(self.topology, service_hosts=dict(metrics.service_hosts))
         self._history.append(metrics)
         slo_status = self.evaluator.evaluate(metrics)
         return Observation(

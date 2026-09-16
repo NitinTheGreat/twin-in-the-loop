@@ -176,3 +176,37 @@ def test_fault_in_fork_does_not_affect_parent():
 
     after = sim.snapshot()
     assert after == pre
+
+
+def test_gateway_not_a_fault_target_by_default():
+    topology = _topology()
+    assert FaultConfig().gateway_faultable is False
+    assert "gw0" not in targets_from_topology(topology)["node"]
+    assert targets_from_topology(topology, FaultConfig().gateway_faultable)["node"] == [
+        "edge0", "edge1", "edge2", "edge3"]
+
+
+def test_gateway_faultable_flag_adds_gateway_target():
+    topology = _topology()
+    targets = targets_from_topology(topology, FaultConfig(gateway_faultable=True).gateway_faultable)
+    assert targets["node"] == ["edge0", "edge1", "edge2", "edge3", "gw0"]
+    events = [event for seed in range(200)
+              for event in FaultSchedule.generate(seed, FaultConfig(gateway_faultable=True), targets).events]
+    assert any(event.target == "gw0" for event in events)
+
+
+def test_default_schedules_unchanged_by_flag_plumbing():
+    topology = _topology()
+    for seed in range(20):
+        legacy = FaultSchedule.generate(seed, FaultConfig(), targets_from_topology(topology)).events
+        flagged = FaultSchedule.generate(
+            seed, FaultConfig(), targets_from_topology(topology, FaultConfig().gateway_faultable)).events
+        assert legacy == flagged
+
+
+def test_gateway_crash_interrupts_service_traffic():
+    sim = _sim(FaultSchedule([_event("node_crash", "gw0", 1.0, start=5, duration=10)]))
+    metrics = _collect(sim, 12)
+    during = metrics[8]
+    assert sim.state.nodes["gw0"].status == "down"
+    assert all(during.service_throughput[sid] == 0.0 for sid in during.service_throughput)

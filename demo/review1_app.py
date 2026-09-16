@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import plotly.graph_objects as go
 import streamlit as st
 
+from twinloop.sim.metrics import latency_ms
 from twinloop.config import FaultConfig, SimConfig, SLOConfig, TopologyConfig
 from twinloop.faults.catalog import FAULT_TYPES
 from twinloop.faults.schedule import FaultSchedule, targets_from_topology
@@ -102,7 +103,7 @@ def simulate(seed: int, length: int, fault_seed: int):
             "node_status": node_status,
             "link_latency": dict(metrics.link_latency),
             "link_status": link_status,
-            "p95_ms": {sid: metrics.service_p95[sid] * 1000.0 for sid in service_ids},
+            "p95_ms": {sid: latency_ms(metrics.service_p95[sid]) for sid in service_ids},
             "compliant": {sid: observation.slo_status[sid].compliant for sid in service_ids},
             "n_violations": n_violations,
             "agent_text": text,
@@ -120,7 +121,7 @@ def simulate(seed: int, length: int, fault_seed: int):
         violation_flags.append(n_violations > 0)
 
         for sid in service_ids:
-            hash_parts.append(f"{metrics.tick}:{sid}:{metrics.service_p95[sid]:.6f}")
+            hash_parts.append(f"{metrics.tick}:{sid}:{metrics.service_p95[sid]}")
         for nid in node_ids:
             hash_parts.append(f"{metrics.tick}:{nid}:{metrics.node_utilisation[nid]:.6f}")
 

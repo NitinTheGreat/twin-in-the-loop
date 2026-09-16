@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from ..sim.metrics import latency_ms, mean_latency, display_latency, rounded_latency
+
 import os
 import time
 from pathlib import Path
@@ -159,7 +161,7 @@ def _mean(xs):
 
 
 def _traj(metrics):
-    return [round(_mean(m.service_p95.values()) * 1000, 1) for m in metrics]
+    return [rounded_latency(mean_latency(m.service_p95.values())) for m in metrics]
 
 
 def run_stream(
@@ -185,7 +187,7 @@ def run_stream(
 
     agent, client = _build_agent(agent_kind, provider_name, cfg)
     topology = build_topology(cfg.topology, cfg.sim, arrival_rate=arrival_rate)
-    schedule = FaultSchedule.generate(seed, cfg.fault, targets_from_topology(topology))
+    schedule = FaultSchedule.generate(seed, cfg.fault, targets_from_topology(topology, cfg.fault.gateway_faultable))
     sim = NetworkSim(topology, cfg.sim, seed=seed, schedule=schedule)
     collector = Collector(summarize_topology(topology), cfg.slo)
     summarizer = Summarizer(cfg.slo)
@@ -253,10 +255,10 @@ def run_stream(
         yield {
             "type": "tick",
             "tick": tick,
-            "p95": round(_mean(metrics.service_p95.values()) * 1000, 1),
+            "p95": rounded_latency(mean_latency(metrics.service_p95.values())),
             "violations": sum(1 for s in obs.slo_status.values() if not s.compliant),
             "cum": collector.evaluator.total_violation_ticks,
-            "sp": {k: round(v * 1000, 1) for k, v in metrics.service_p95.items()},
+            "sp": {k: rounded_latency(v) for k, v in metrics.service_p95.items()},
             "sd": {k: round(v, 3) for k, v in metrics.service_drop_rate.items()},
             "so": {k: (1 if v.compliant else 0) for k, v in obs.slo_status.items()},
             "sh": {k: s.host_node_id for k, s in sim.state.services.items()},
@@ -333,6 +335,8 @@ def run_stream(
                 "tools": list(trace.get("tools_called", [])) if trace else [],
                 "steps": trace.get("steps") if trace else None,
                 "agent_exhausted": bool(trace.get("exhausted")) if trace else False,
+                "decision_outcome": trace.get("outcome") if trace else None,
+                "decision_fallback": trace.get("fallback", False) if trace else False,
             }
             totals["proposals"] += 1
 
@@ -355,7 +359,8 @@ def run_stream(
                 }
 
             records.append(
-                {"action": action, "retry_index": retries, "verdict": verdict, "was_applied": False}
+                {"action": action, "retry_index": retries, "verdict": verdict, "was_applied": False,
+                 "decision_trace": dict(trace or {})}
             )
 
             if verdict is None or verdict.approved:
@@ -407,6 +412,8 @@ def run_stream(
                         "harm": gt.harm_delta,
                         "harmful": harmful,
                         "was_applied": record["was_applied"],
+                        "decision_outcome": gt.decision_trace.get("outcome"),
+                        "decision_fallback": gt.decision_trace.get("fallback", False),
                         "blocked": blocked,
                         "cf_ms": round(gt.cf_wallclock_ms, 1),
                     }

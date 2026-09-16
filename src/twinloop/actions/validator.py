@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 
 from ..config import ActionsConfig
 from ..sim.state import SimState
+from ..sim.routing import path_error, route_to
 from .schema import (
     MigrateService,
     NoOp,
@@ -28,25 +30,6 @@ def _node_mem_used(state: SimState, node_id: str) -> float:
     )
 
 
-def _path_verdict(state: SimState, path: list[str], host_node_id: str) -> str:
-    if not path:
-        return "empty path is not connected"
-    for link_id in path:
-        if link_id not in state.links:
-            return f"unknown link {link_id} in path"
-    for link_id in path:
-        if state.links[link_id].status != "up":
-            return f"path traverses down link {link_id}"
-    reachable = set(state.links[path[0]].endpoints)
-    for link_id in path[1:]:
-        endpoints = set(state.links[link_id].endpoints)
-        if reachable.isdisjoint(endpoints):
-            return "path links are not connected"
-        reachable |= endpoints
-    if host_node_id not in reachable:
-        return "path does not reach the service host"
-    return ""
-
 
 def validate_action(action, state: SimState, config: ActionsConfig) -> ValidationResult:
     if isinstance(action, NoOp):
@@ -56,6 +39,8 @@ def validate_action(action, state: SimState, config: ActionsConfig) -> Validatio
     if sid not in state.services:
         return ValidationResult(False, f"service {sid} does not exist")
     service = state.services[sid]
+    if any(effect.service_id == sid for effect in state.pending):
+        return ValidationResult(False, f"service {sid} has a pending action")
 
     if isinstance(action, MigrateService):
         target = action.target_node_id
@@ -64,6 +49,10 @@ def validate_action(action, state: SimState, config: ActionsConfig) -> Validatio
         node = state.nodes[target]
         if node.status == "down":
             return ValidationResult(False, f"target node {target} is down")
+        if target == service.host_node_id:
+            return ValidationResult(False, "service is already on target")
+        if route_to(state, sid, target) is None:
+            return ValidationResult(False, "target has no operational client path")
         footprint = service.mem_footprint * max(service.replicas, 1)
         if _node_mem_used(state, target) + footprint > node.mem_capacity:
             return ValidationResult(
@@ -75,6 +64,8 @@ def validate_action(action, state: SimState, config: ActionsConfig) -> Validatio
         return ValidationResult(True, "restart accepted")
 
     if isinstance(action, ScaleService):
+        if action.delta_replicas == 0:
+            return ValidationResult(False, "scale delta cannot be zero")
         new_replicas = service.replicas + action.delta_replicas
         if new_replicas < 1:
             return ValidationResult(False, "scale would drop replicas below one")
@@ -93,14 +84,14 @@ def validate_action(action, state: SimState, config: ActionsConfig) -> Validatio
         return ValidationResult(True, "scale accepted")
 
     if isinstance(action, RerouteTraffic):
-        verdict = _path_verdict(state, action.path_hint, service.host_node_id)
+        verdict = path_error(state, action.path_hint, service.source_node_id, service.host_node_id)
         if verdict:
             return ValidationResult(False, verdict)
         return ValidationResult(True, "reroute accepted")
 
     if isinstance(action, ThrottleService):
-        if action.rate_limit <= 0.0:
-            return ValidationResult(False, "rate_limit must be positive")
+        if not math.isfinite(action.rate_limit) or action.rate_limit <= 0.0:
+            return ValidationResult(False, "rate_limit must be finite and positive")
         return ValidationResult(True, "throttle accepted")
 
     return ValidationResult(False, "unknown action")

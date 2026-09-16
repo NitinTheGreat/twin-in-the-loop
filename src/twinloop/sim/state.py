@@ -25,5 +25,6 @@ class SimState:
     routes: dict[str, list[str]] = field(default_factory=dict)
     workloads: dict[str, Workload] = field(default_factory=dict)
     active_faults: dict[int, dict] = field(default_factory=dict)
+    fault_baselines: dict[str, dict] = field(default_factory=dict)
     pending: list[PendingEffect] = field(default_factory=list)
     rng_states: dict[str, dict] = field(default_factory=dict)

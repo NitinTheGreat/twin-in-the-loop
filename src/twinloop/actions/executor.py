@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from ..config import ActionsConfig
 from ..sim.state import PendingEffect
+from .validator import validate_action
 from .schema import (
     MigrateService,
     NoOp,
@@ -31,6 +32,9 @@ def _migration_downtime(mem_footprint: float, config: ActionsConfig) -> int:
 
 def execute_action(sim, action, config: ActionsConfig) -> ActionResult:
     state = sim.state
+    verdict = validate_action(action, state, config)
+    if not verdict.valid:
+        return ActionResult(action.type, False, verdict.reason)
 
     if isinstance(action, NoOp):
         return ActionResult("no_op", True, "did nothing", 0.0, {})
@@ -41,8 +45,7 @@ def execute_action(sim, action, config: ActionsConfig) -> ActionResult:
         downtime = _migration_downtime(service.mem_footprint, config)
         cost = service.mem_footprint * config.migration_transfer_cost
         service.status = "down"
-        service.queue.clear()
-        service.in_service = None
+        service.discard_requests()
         state.pending.append(
             PendingEffect(
                 kind="migrate",
@@ -62,8 +65,7 @@ def execute_action(sim, action, config: ActionsConfig) -> ActionResult:
     if isinstance(action, RestartService):
         downtime = config.restart_downtime
         service.status = "down"
-        service.queue.clear()
-        service.in_service = None
+        service.discard_requests()
         state.pending.append(
             PendingEffect(
                 kind="restart",

@@ -22,9 +22,12 @@ class FaultEvent:
     magnitude: float
 
 
-def targets_from_topology(topology) -> dict[str, list[str]]:
+def targets_from_topology(topology, include_gateway: bool = False) -> dict[str, list[str]]:
+    node_targets = [n.id for n in topology.nodes if n.role == "edge"]
+    if include_gateway:
+        node_targets += [n.id for n in topology.nodes if n.role == "gateway"]
     return {
-        NODE_TARGET: [n.id for n in topology.nodes if n.role == "edge"],
+        NODE_TARGET: node_targets,
         LINK_TARGET: [link.id for link in topology.links],
         SERVICE_TARGET: [s.id for s in topology.services],
     }

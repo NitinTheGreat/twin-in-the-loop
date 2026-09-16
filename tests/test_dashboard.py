@@ -1,9 +1,15 @@
 from pathlib import Path
+import pytest
 
 from twinloop.dashboard import viz
 from twinloop.dashboard.driver import compare_arms, run_instrumented_episode
 
 APP = str(Path(__file__).resolve().parents[1] / "app.py")
+
+
+@pytest.fixture(autouse=True)
+def isolated_dashboard_cache(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
 
 
 def test_driver_scripted_episode_structure():

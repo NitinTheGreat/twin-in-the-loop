@@ -16,6 +16,7 @@ from ..llm.cache import ResponseCache
 from ..llm.client import LLMClient
 from ..llm.providers import CloudProvider, LocalProvider
 from ..sim.engine import NetworkSim, build_topology
+from ..sim.routing import reroute_feasibility
 from ..telemetry.slo import SLOEvaluator
 from ..twin.fidelity import fidelity_to_config
 from ..twin.validator import TwinValidator
@@ -72,7 +73,7 @@ def _cumulative(slo_config, metrics) -> list[int]:
 def _schedule_for(config, seed):
     topology = build_topology(config.topology, config.sim)
     schedule = FaultSchedule.generate(
-        seed, config.fault, targets_from_topology(topology)
+        seed, config.fault, targets_from_topology(topology, config.fault.gateway_faultable)
     )
     return topology, schedule
 
@@ -91,6 +92,13 @@ def run_single(
     output_dir = Path(output_dir)
     topology, schedule = _schedule_for(config, run.seed)
     sim = NetworkSim(topology, config.sim, seed=run.seed, schedule=schedule)
+    reroute_scenarios = [
+        {"fault_type": event.type, "target": event.target,
+         "start_tick": event.start_tick,
+         "services": reroute_feasibility(sim.state, [
+             sid for sid, path in sim.state.routes.items() if event.target in path])}
+        for event in schedule.events if event.type in ("link_failure", "link_degradation")
+    ]
     agent = _make_agent(
         run, config, provider_factory, budget, cache, str(output_dir / "llm_calls.jsonl")
     )
@@ -147,6 +155,10 @@ def run_single(
                     proposed_action=gt.action.model_dump(),
                     schema_valid=True,
                     semantically_valid=semantically_valid,
+                    reroute_feasibility=gt.reroute_feasibility,
+                    decision_trace=gt.decision_trace,
+                    decision_outcome=gt.decision_trace.get("outcome"),
+                    decision_fallback=gt.decision_trace.get("fallback", False),
                     twin_verdict=verdict.approved if verdict else None,
                     twin_reason=verdict.reason if verdict else None,
                     twin_predicted_violation_ticks_action=verdict.action_violation_ticks
@@ -210,6 +222,7 @@ def run_single(
         fidelity=run.fidelity,
         agent_type=run.agent_kind,
         gate_enabled=run.gate_enabled,
+        reroute_fault_scenarios=reroute_scenarios,
         decision_interval_ticks=interval,
         total_ticks=config.sim.episode_ticks,
         slo_violation_ticks=result.violation_ticks,

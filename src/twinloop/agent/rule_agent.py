@@ -99,7 +99,7 @@ class RuleAgent:
             return False
         target = obs.slo_status[sid].p95_target_ms
         return all(
-            m.service_p95.get(sid, 0.0) * 1000.0 > target for m in obs.history[-k:]
+            (m.service_p95.get(sid) is not None and m.service_p95[sid] * 1000.0 > target) for m in obs.history[-k:]
         )
 
     def _node_mem_used(self, ctx: DecisionContext, node_id: str) -> float:

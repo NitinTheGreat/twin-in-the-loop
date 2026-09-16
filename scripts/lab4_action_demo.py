@@ -7,6 +7,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
+from twinloop.sim.metrics import latency_ms, mean_latency, display_latency
 from twinloop.actions.executor import execute_action
 from twinloop.actions.schema import (
     MigrateService,
@@ -46,14 +47,14 @@ def _topology(rate_a=42.0, rate_n=42.0):
 def _summary(sim, sid, ticks):
     metrics = [sim.step() for _ in range(ticks)]
     tail = metrics[-15:]
-    p95 = np.mean([m.service_p95[sid] for m in tail]) * 1000
+    p95 = latency_ms(mean_latency(m.service_p95[sid] for m in tail))
     drop = np.mean([m.service_drop_rate[sid] for m in tail]) * 100
     thr = np.mean([m.service_throughput[sid] for m in tail])
     return p95, drop, thr
 
 
 def _line(label, p95, drop, thr):
-    return f"  {label:<16} p95={p95:7.1f}ms  drop={drop:5.1f}%  thr={thr:5.1f}rps"
+    return f"  {label:<16} p95={display_latency(p95)}  drop={drop:5.1f}%  thr={thr:5.1f}rps"
 
 
 def _scenario(title, sid, make_sim, make_action, note, warm=60, after=40):

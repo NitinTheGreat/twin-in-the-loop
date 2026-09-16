@@ -30,105 +30,53 @@ TARGET_KIND = {
 }
 
 
-class NodeCpuSaturation:
-    def apply(self, event, state):
-        node = state.nodes[event.target]
-        saved = {"cpu_reserved": node.cpu_reserved, "status": node.status}
-        fraction = min(0.98, max(0.0, event.magnitude / 5.0))
-        node.cpu_reserved = node.cpu_capacity * fraction
-        node.status = "degraded"
-        return saved
-
-    def on_tick(self, event, state, saved):
-        return None
-
-    def revert(self, event, state, saved):
-        node = state.nodes[event.target]
-        node.cpu_reserved = saved["cpu_reserved"]
-        node.status = saved["status"]
-
-
-class NodeCrash:
-    def apply(self, event, state):
-        node = state.nodes[event.target]
-        saved = {"status": node.status}
-        node.status = "down"
-        return saved
-
-    def on_tick(self, event, state, saved):
-        return None
-
-    def revert(self, event, state, saved):
-        state.nodes[event.target].status = saved["status"]
-
-
-class LinkDegradation:
-    def apply(self, event, state):
-        link = state.links[event.target]
-        saved = {
-            "latency_multiplier": link.latency_multiplier,
-            "loss_rate": link.loss_rate,
-        }
-        link.latency_multiplier = link.latency_multiplier * event.magnitude
-        link.loss_rate = min(1.0, link.loss_rate + 0.1 * event.magnitude)
-        return saved
-
-    def on_tick(self, event, state, saved):
-        return None
-
-    def revert(self, event, state, saved):
-        link = state.links[event.target]
-        link.latency_multiplier = saved["latency_multiplier"]
-        link.loss_rate = saved["loss_rate"]
-
-
-class LinkFailure:
-    def apply(self, event, state):
-        link = state.links[event.target]
-        saved = {"status": link.status}
-        link.status = "down"
-        return saved
-
-    def on_tick(self, event, state, saved):
-        return None
-
-    def revert(self, event, state, saved):
-        state.links[event.target].status = saved["status"]
-
-
-class ServiceMemoryLeak:
-    def apply(self, event, state):
-        service = state.services[event.target]
-        return {"mem_footprint": service.mem_footprint}
-
-    def on_tick(self, event, state, saved):
-        service = state.services[event.target]
-        service.mem_footprint = service.mem_footprint + event.magnitude
-
-    def revert(self, event, state, saved):
-        state.services[event.target].mem_footprint = saved["mem_footprint"]
-
-
-class TrafficSurge:
-    def apply(self, event, state):
-        workload = state.workloads[event.target]
-        saved = {"rate": workload.rate}
-        workload.rate = workload.rate * event.magnitude
-        return saved
-
-    def on_tick(self, event, state, saved):
-        return None
-
-    def revert(self, event, state, saved):
-        state.workloads[event.target].rate = saved["rate"]
-
-
-def build_catalog():
+# Composition is computed from one baseline per affected field, never per-event undo.
+# CPU reservation and loss add (capped); latency and traffic multipliers multiply.
+# Down dominates degraded dominates baseline status. Active leak bytes add.
+def fault_fields(event):
     return {
-        NODE_CPU_SATURATION: NodeCpuSaturation(),
-        NODE_CRASH: NodeCrash(),
-        LINK_DEGRADATION: LinkDegradation(),
-        LINK_FAILURE: LinkFailure(),
-        SERVICE_MEMORY_LEAK: ServiceMemoryLeak(),
-        TRAFFIC_SURGE: TrafficSurge(),
-    }
+        NODE_CPU_SATURATION: ("nodes", ("cpu_reserved", "status")),
+        NODE_CRASH: ("nodes", ("status",)),
+        LINK_DEGRADATION: ("links", ("latency_multiplier", "loss_rate")),
+        LINK_FAILURE: ("links", ("status",)),
+        SERVICE_MEMORY_LEAK: ("services", ("mem_footprint",)),
+        TRAFFIC_SURGE: ("workloads", ("rate",)),
+    }[event.type]
+
+
+def reset_leak_memory(state, sid):
+    """Restart reclaims all accumulated bytes, but active leaks resume next tick."""
+    service = state.services[sid]
+    service.mem_footprint = service.baseline_mem
+    key = f"services:{sid}:mem_footprint"
+    if key in state.fault_baselines:
+        state.fault_baselines[key]["value"] = service.baseline_mem
+    for contribution in state.active_faults.values():
+        if contribution["type"] == SERVICE_MEMORY_LEAK and contribution["target"] == sid:
+            contribution["bytes"] = 0.0
+
+
+def compose_faults(state):
+    for baseline in state.fault_baselines.values():
+        obj = getattr(state, baseline["collection"])[baseline["target"]]
+        setattr(obj, baseline["field"], baseline["value"])
+    for contribution in state.active_faults.values():
+        kind, target, magnitude = (contribution[k] for k in ("type", "target", "magnitude"))
+        if kind == NODE_CPU_SATURATION:
+            node = state.nodes[target]
+            node.cpu_reserved = min(node.cpu_capacity * .98,
+                                    node.cpu_reserved + node.cpu_capacity * min(.98, max(0, magnitude / 5)))
+            if node.status != "down":
+                node.status = "degraded"
+        elif kind == NODE_CRASH:
+            state.nodes[target].status = "down"
+        elif kind == LINK_DEGRADATION:
+            link = state.links[target]
+            link.latency_multiplier *= magnitude
+            link.loss_rate = min(1.0, link.loss_rate + .1 * magnitude)
+        elif kind == LINK_FAILURE:
+            state.links[target].status = "down"
+        elif kind == SERVICE_MEMORY_LEAK:
+            state.services[target].mem_footprint += contribution["bytes"]
+        elif kind == TRAFFIC_SURGE:
+            state.workloads[target].rate *= magnitude

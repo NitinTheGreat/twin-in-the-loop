@@ -63,6 +63,7 @@ def _sanitized_state(state: SimState) -> SimState:
             status=s.status,
             baseline_mem=s.baseline_mem,
             rate_limit=s.rate_limit,
+            source_node_id=s.source_node_id,
         )
         for sid, s in state.services.items()
     }
