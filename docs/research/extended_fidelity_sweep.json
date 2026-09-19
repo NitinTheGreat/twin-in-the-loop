@@ -2104,6 +2104,39 @@
      ]
     }
    },
+   "episode_diff_curve_vs_reject_all": {
+    "fidelities": [
+     0.0,
+     0.2,
+     0.4,
+     0.6,
+     0.8,
+     1.0
+    ],
+    "mean_per_seed": [
+     1.0733333333333333,
+     0.76,
+     -0.5,
+     -1.0666666666666667,
+     -1.7066666666666668,
+     -2.32
+    ],
+    "observed_crossings": [
+     0.32063492063492066
+    ],
+    "bootstrap_crossing_counts": {
+     "0": 136,
+     "1": 4861,
+     "2": 3,
+     "3": 0,
+     "4": 0,
+     "5": 0
+    },
+    "bootstrap_single_crossing_ci95": [
+     0.12149846239865811,
+     0.552923076923077
+    ]
+   },
    "episode_comparisons": {
     "twin@0.0 - always_reject": {
      "diffs": [
@@ -7814,6 +7847,37 @@
       }
      ]
     }
+   },
+   "episode_diff_curve_vs_reject_all": {
+    "fidelities": [
+     0.0,
+     0.2,
+     0.4,
+     0.6,
+     0.8,
+     1.0
+    ],
+    "mean_per_seed": [
+     15.013333333333334,
+     11.28,
+     6.3133333333333335,
+     2.3666666666666667,
+     0.56,
+     0.23333333333333334
+    ],
+    "observed_crossings": [],
+    "bootstrap_crossing_counts": {
+     "0": 4445,
+     "1": 555,
+     "2": 0,
+     "3": 0,
+     "4": 0,
+     "5": 0
+    },
+    "bootstrap_single_crossing_ci95": [
+     0.7967954307638647,
+     1.0
+    ]
    },
    "episode_comparisons": {
     "twin@0.0 - always_reject": {
