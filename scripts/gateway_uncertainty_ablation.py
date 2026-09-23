@@ -28,6 +28,7 @@ from twinloop.experiment.runner import _schedule_for, run_single
 from twinloop.llm.budget import BudgetGuard
 from twinloop.llm.cache import ResponseCache
 from twinloop.llm.providers import ProviderResponse
+from twinloop.twin.fidelity import fidelity_to_config
 from twinloop.twin.rollout import FAULT_MODE_SCHEDULED, rollout
 from twinloop.twin.validator import TwinValidator, TwinVerdict
 
@@ -38,7 +39,13 @@ KEEP_FIELDS = (
     "seed", "tick", "decision_index", "retry_index", "proposed_action", "twin_verdict",
     "was_applied", "counterfactual_violation_ticks_action", "counterfactual_violation_ticks_noop",
     "counterfactual_harm_delta", "ground_truth_harmful",
+    "twin_predicted_violation_ticks_action", "twin_predicted_violation_ticks_noop",
 )
+
+
+def no_simplify_fidelity_to_config(fidelity, horizon_ticks=30, tolerance_margin=0.0):
+    config = fidelity_to_config(fidelity, horizon_ticks, tolerance_margin)
+    return config.model_copy(update={"simplify_queueing": False})
 
 
 def _first_violator(prompt):
@@ -496,6 +503,9 @@ def command_sweep(args):
     budget = BudgetGuard(10**12, 10**15)
     cache = ResponseCache(work / "cache.json")
     tasks = [t for i, t in enumerate(sweep_tasks(seeds)) if i % args.workers == args.worker]
+    forced_off = bool(getattr(args, "no_simplify_queueing", False))
+    runner_mod.fidelity_to_config = (no_simplify_fidelity_to_config if forced_off
+                                     else fidelity_to_config)
     done = 0
     for agent_kind, arm, gated, fidelity, patch, seed in tasks:
         target = shard_path(shards, agent_kind, arm, seed)
@@ -510,6 +520,7 @@ def command_sweep(args):
         finally:
             runner_mod.TwinValidator = REAL_TWIN
         payload = {"agent": agent_kind, "arm": arm, "seed": seed, "fidelity": fidelity,
+                   "simplify_queueing_forced_off": forced_off,
                    "violation_ticks": summary["slo_violation_ticks"],
                    "wall_seconds": time.perf_counter() - started,
                    "records": [{k: r.get(k) for k in KEEP_FIELDS} for r in recs]}
@@ -707,9 +718,9 @@ def adjacent_changes(arrays_by_name, names, idx):
     return result
 
 
-def command_sweep_analyze(args):
-    data = load_shards(args.shards)
-    rng = np.random.default_rng(20260917)
+def analyze_shards(shards, rng_seed=20260917, data=None):
+    data = load_shards(shards) if data is None else data
+    rng = np.random.default_rng(rng_seed)
     null = data["null"]["A0"]
     seeds = sorted(null)
     for agent_kind in SWEEP_AGENTS:
@@ -792,8 +803,241 @@ def command_sweep_analyze(args):
         agent["episode_comparisons"] = results
         agent["per_seed_violation_ticks"] = totals
         output["agents"][agent_kind] = agent
+    output["simplify_queueing_forced_off"] = bool(
+        next(iter(next(iter(data["null"].values())).values()))
+        .get("simplify_queueing_forced_off", False))
+    return output
+
+
+def command_sweep_analyze(args):
+    output = analyze_shards(args.shards)
     Path(args.output).write_text(json.dumps(output, indent=1), encoding="utf-8")
     print_sweep_summary(output)
+
+
+TAUS = (0, 1, 2, 3)
+THETAS = (1, 3, 5)
+
+
+def candidate_corpus(data, agent_kind, arm, seeds):
+    rows = []
+    for seed in seeds:
+        for r in data[agent_kind][arm][seed]["records"]:
+            action = r.get("proposed_action") or {}
+            if action.get("type") == "no_op":
+                continue
+            predicted_action = r.get("twin_predicted_violation_ticks_action")
+            predicted_noop = r.get("twin_predicted_violation_ticks_noop")
+            if predicted_action is None or predicted_noop is None:
+                continue
+            rows.append({"seed": seed, "predicted_delta": predicted_action - predicted_noop,
+                         "true_delta": r["counterfactual_harm_delta"],
+                         "recorded_verdict": r["twin_verdict"], "action": action.get("type")})
+    return rows
+
+
+def _cell_arrays(rows, seeds, tau, theta):
+    index = {seed: i for i, seed in enumerate(seeds)}
+    keys = ("tp", "fn", "fp", "tn", "fp_definitional", "fp_at_theta", "fp_beneficial",
+            "benefit_total", "benefit_approved", "harm_total", "harm_rejected", "net_approved")
+    arrays = {k: np.zeros(len(seeds)) for k in keys}
+    for row in rows:
+        i = index[row["seed"]]
+        d = row["true_delta"]
+        rejected = row["predicted_delta"] > tau
+        harmful = d > theta
+        if rejected and harmful:
+            arrays["tp"][i] += 1
+        elif not rejected and harmful:
+            arrays["fn"][i] += 1
+        elif rejected and not harmful:
+            arrays["fp"][i] += 1
+            if d > tau:
+                arrays["fp_definitional"][i] += 1
+            if d == theta:
+                arrays["fp_at_theta"][i] += 1
+            if d < 0:
+                arrays["fp_beneficial"][i] += 1
+        else:
+            arrays["tn"][i] += 1
+        arrays["benefit_total"][i] += max(-d, 0)
+        arrays["harm_total"][i] += max(d, 0)
+        if rejected:
+            arrays["harm_rejected"][i] += max(d, 0)
+        else:
+            arrays["benefit_approved"][i] += max(-d, 0)
+            arrays["net_approved"][i] += d
+    return arrays
+
+
+def tau_theta_grid(rows, seeds, idx):
+    cells = []
+    for tau in TAUS:
+        for theta in THETAS:
+            a = _cell_arrays(rows, seeds, tau, theta)
+            positives = a["tp"] + a["fn"]
+            negatives = a["fp"] + a["tn"]
+            fp_total = float(a["fp"].sum())
+            definitional = float(a["fp_definitional"].sum())
+            net = a["net_approved"]
+            net_boot = net[idx].mean(axis=1)
+            cells.append({
+                "tau": tau, "theta": theta, "tau_equals_theta": tau == theta,
+                "counts": {"tp": int(a["tp"].sum()), "fn": int(a["fn"].sum()),
+                           "fp": int(fp_total), "tn": int(a["tn"].sum()),
+                           "positives": int(positives.sum()), "negatives": int(negatives.sum())},
+                "recall": ratio_with_ci(a["tp"], positives, idx),
+                "fpr": ratio_with_ci(a["fp"], negatives, idx),
+                "precision": ratio_with_ci(a["tp"], a["tp"] + a["fp"], idx),
+                "benefit_preserved": ratio_with_ci(a["benefit_approved"], a["benefit_total"], idx),
+                "harm_prevented": ratio_with_ci(a["harm_rejected"], a["harm_total"], idx),
+                "net_sum_d_approved": {
+                    "total": float(net.sum()), "mean_per_seed": float(net.mean()),
+                    "bootstrap_ci95": [float(np.quantile(net_boot, 0.025)),
+                                       float(np.quantile(net_boot, 0.975))]},
+                "false_positives": {
+                    "total": int(fp_total), "definitional": int(definitional),
+                    "predictive": int(fp_total - definitional),
+                    "definitional_share": (definitional / fp_total) if fp_total else None,
+                    "at_theta_exactly": int(a["fp_at_theta"].sum()),
+                    "predictive_and_beneficial": int(a["fp_beneficial"].sum()),
+                    "rule": "definitional = predicted reject and tau < true D <= theta; "
+                            "at_theta_exactly is the D == theta subset of it; "
+                            "predictive_and_beneficial = predicted reject and true D < 0"},
+            })
+    return cells
+
+
+def corpus_summary(rows, tau_zero_matches):
+    deltas = [r["true_delta"] for r in rows]
+    return {"candidates": len(rows),
+            "beneficial": sum(1 for d in deltas if d < 0),
+            "neutral": sum(1 for d in deltas if d == 0),
+            "harmful_gt_0": sum(1 for d in deltas if d > 0),
+            "harmful_gt_1": sum(1 for d in deltas if d > 1),
+            "harmful_gt_3": sum(1 for d in deltas if d > 3),
+            "harmful_gt_5": sum(1 for d in deltas if d > 5),
+            "recorded_verdict_matches_tau0": tau_zero_matches,
+            "predicted_delta_quantiles": sweep_quantiles([r["predicted_delta"] for r in rows])}
+
+
+def paired_arm_diff(a_values, b_values, idx):
+    diffs = np.asarray(a_values, dtype=float) - np.asarray(b_values, dtype=float)
+    boots = diffs[idx].mean(axis=1)
+    return {"mean": float(diffs.mean()), "total": float(diffs.sum()),
+            "bootstrap_ci95": [float(np.quantile(boots, 0.025)), float(np.quantile(boots, 0.975))],
+            "nonzero_seeds": int((diffs != 0).sum()),
+            "wilcoxon": wilcoxon_exact_dp([float(d) for d in diffs])}
+
+
+def command_extended_analyze(args):
+    rng = np.random.default_rng(20260920)
+    loaded = {"discrete_switch": load_shards(args.discrete),
+              "queueing_held_constant": load_shards(args.continuous)}
+    seeds = sorted(loaded["discrete_switch"]["null"]["A0"])
+    idx = rng.integers(0, len(seeds), (5000, len(seeds)))
+    grid_idx = idx[:2000]
+    output = {"seeds": seeds, "n_seeds": len(seeds), "fidelities": list(SWEEP_FIDELITIES),
+              "taus": list(TAUS), "thetas": list(THETAS),
+              "queueing_switch": {"parameter": "TwinConfig.simplify_queueing",
+                                  "rule": "fidelity < 0.5 in twin/fidelity.py",
+                                  "discrete_switch": "as configured: on at 0.0/0.2/0.4, off at 0.6/0.8/1.0",
+                                  "queueing_held_constant": "forced off at every fidelity level"},
+              "conditions": {}, "side_by_side": {}, "tau_theta": {}}
+    for label, data in loaded.items():
+        output["conditions"][label] = analyze_shards(None, data=data)
+    twin_names = [f"twin@{f:.1f}" for f in SWEEP_FIDELITIES]
+    for agent_kind in SWEEP_AGENTS:
+        entry = {"label": AGENT_LABEL[agent_kind], "per_arm_condition_delta": {}}
+        for label in loaded:
+            agent = output["conditions"][label]["agents"][agent_kind]
+            curve = agent["net_sum_d_curve"]["mean_per_seed"]
+            entry[label] = {
+                "net_sum_d_curve": curve,
+                "net_sum_d_ci95": [agent["arms"][n]["net_sum_d_approved"]["bootstrap_ci95"] for n in twin_names],
+                "observed_crossings": agent["net_sum_d_curve"]["observed_crossings"],
+                "bootstrap_crossing_counts": agent["net_sum_d_curve"]["bootstrap_crossing_counts"],
+                "bootstrap_single_crossing_ci95": agent["net_sum_d_curve"]["bootstrap_single_crossing_ci95"],
+                "bootstrap_single_crossing_median": agent["net_sum_d_curve"]["bootstrap_single_crossing_median"],
+                "episode_diff_curve_vs_reject_all": agent["episode_diff_curve_vs_reject_all"],
+                "benefit_preserved": [agent["arms"][n]["benefit_preserved"]["point"] for n in twin_names],
+                "harm_prevented": [agent["arms"][n]["harm_prevented"]["point"] for n in twin_names],
+                "adjacent_level_changes": agent["net_sum_d_curve"]["adjacent_level_changes"],
+                "monotone_decreasing": all(b <= a for a, b in zip(curve[:-1], curve[1:])),
+                "sign_changes": sum(1 for a, b in zip(curve[:-1], curve[1:]) if (a > 0 > b) or (a < 0 < b)),
+            }
+        for name in twin_names + ["always_reject", "ungated", "random", "oracle"]:
+            arrays = {}
+            for label, data in loaded.items():
+                by_seed = {s: data[agent_kind][name][s]["records"] for s in seeds}
+                arrays[label] = per_seed_candidate_arrays(by_seed, seeds, name != "ungated")
+            episodes = {label: [data[agent_kind][name][s]["violation_ticks"] for s in seeds]
+                        for label, data in loaded.items()}
+            entry["per_arm_condition_delta"][name] = {
+                "net_sum_d_delta_continuous_minus_discrete": paired_arm_diff(
+                    arrays["queueing_held_constant"]["net_approved"],
+                    arrays["discrete_switch"]["net_approved"], idx),
+                "episode_delta_continuous_minus_discrete": paired_arm_diff(
+                    episodes["queueing_held_constant"], episodes["discrete_switch"], idx),
+                "identical_episodes": episodes["queueing_held_constant"] == episodes["discrete_switch"],
+            }
+        output["side_by_side"][agent_kind] = entry
+    for label, data in loaded.items():
+        per_condition = {}
+        for agent_kind in SWEEP_AGENTS:
+            per_agent = {}
+            for fidelity, name in zip(SWEEP_FIDELITIES, twin_names):
+                rows = candidate_corpus(data, agent_kind, name, seeds)
+                matches = sum(1 for r in rows if r["recorded_verdict"] == (r["predicted_delta"] <= 0))
+                per_agent[f"{fidelity:.1f}"] = {
+                    "arm": name, "corpus": corpus_summary(rows, matches),
+                    "cells": tau_theta_grid(rows, seeds, grid_idx)}
+            per_condition[agent_kind] = per_agent
+        output["tau_theta"][label] = per_condition
+    Path(args.output).write_text(json.dumps(output, indent=1), encoding="utf-8")
+    print_extended_summary(output)
+
+
+def print_extended_summary(output):
+    fmt = lambda v: "n/e" if v is None else f"{v:.3f}"
+    fci = lambda c: "n/e" if c is None else f"[{c[0]:.3f}, {c[1]:.3f}]"
+    for agent_kind, entry in output["side_by_side"].items():
+        print(f"\n########## {entry['label']}")
+        for label in ("discrete_switch", "queueing_held_constant"):
+            block = entry[label]
+            print(f"  --- {label}")
+            print("    net SigmaD  ", [round(v, 3) for v in block["net_sum_d_curve"]])
+            print("    crossings   ", block["observed_crossings"], "counts",
+                  block["bootstrap_crossing_counts"], "CI", block["bootstrap_single_crossing_ci95"],
+                  "median", block["bootstrap_single_crossing_median"],
+                  "sign_changes", block["sign_changes"], "monotone", block["monotone_decreasing"])
+            print("    episode diff", [round(v, 3) for v in block["episode_diff_curve_vs_reject_all"]["mean_per_seed"]],
+                  "crossings", block["episode_diff_curve_vs_reject_all"]["observed_crossings"])
+            print("    BP          ", [fmt(v) for v in block["benefit_preserved"]])
+            print("    HP          ", [fmt(v) for v in block["harm_prevented"]])
+        print("  --- paired continuous minus discrete")
+        for name, diff in entry["per_arm_condition_delta"].items():
+            net = diff["net_sum_d_delta_continuous_minus_discrete"]
+            ep = diff["episode_delta_continuous_minus_discrete"]
+            print(f"    {name:14s} dNet={net['mean']:+.3f} {fci(net['bootstrap_ci95'])} nz={net['nonzero_seeds']} "
+                  f"pW={net['wilcoxon']['p_value']:.4g} | dEp={ep['mean']:+.3f} {fci(ep['bootstrap_ci95'])} "
+                  f"nz={ep['nonzero_seeds']} pW={ep['wilcoxon']['p_value']:.4g} identical={diff['identical_episodes']}")
+    for label, per_condition in output["tau_theta"].items():
+        for agent_kind, per_agent in per_condition.items():
+            for fidelity, block in per_agent.items():
+                c = block["corpus"]
+                print(f"\n== tau/theta {label} {AGENT_LABEL[agent_kind]} f={fidelity} "
+                      f"n={c['candidates']} verdict_match_tau0={c['recorded_verdict_matches_tau0']}")
+                for cell in block["cells"]:
+                    fp = cell["false_positives"]
+                    print(f"   tau={cell['tau']} theta={cell['theta']}{'*' if cell['tau_equals_theta'] else ' '} "
+                          f"recall={fmt(cell['recall']['point'])} {fci(cell['recall']['ci95'])} "
+                          f"fpr={fmt(cell['fpr']['point'])} {fci(cell['fpr']['ci95'])} "
+                          f"BP={fmt(cell['benefit_preserved']['point'])} "
+                          f"HP={fmt(cell['harm_prevented']['point'])} "
+                          f"net={cell['net_sum_d_approved']['mean_per_seed']:+.3f} "
+                          f"FP={fp['total']} def={fp['definitional']} pred={fp['predictive']} "
+                      f"ben={fp['predictive_and_beneficial']}")
 
 
 def print_sweep_summary(output):
@@ -857,9 +1101,14 @@ def main():
     sweep.add_argument("--workers", type=int, required=True)
     sweep.add_argument("--seed-start", type=int, default=0)
     sweep.add_argument("--seed-count", type=int, default=150)
+    sweep.add_argument("--no-simplify-queueing", action="store_true")
     sweep_analyze = sub.add_parser("sweep-analyze")
     sweep_analyze.add_argument("--shards", required=True)
     sweep_analyze.add_argument("--output", required=True)
+    extended = sub.add_parser("extended-analyze")
+    extended.add_argument("--discrete", required=True)
+    extended.add_argument("--continuous", required=True)
+    extended.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "run":
         command_run(args)
@@ -867,6 +1116,8 @@ def main():
         command_analyze(args)
     elif args.command == "sweep":
         command_sweep(args)
+    elif args.command == "extended-analyze":
+        command_extended_analyze(args)
     else:
         command_sweep_analyze(args)
 

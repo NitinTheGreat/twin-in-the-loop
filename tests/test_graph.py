@@ -248,6 +248,9 @@ def test_determinism_with_warm_cache(tmp_path):
         cache_dir,
         ['{"action": {"type": "migrate_service", "service_id": "svc0", "target_node_id": "edge1"}}'],
     )
+    offsets = iter(offset for decision in first.decisions
+                   for trace in decision["proposal_traces"] for offset in trace["clock_offsets"])
+    agent2.clock = lambda: next(offsets)
     second = run_episode(_sim(), agent2, None, config, seed=1, checkpointer=MemorySaver())
 
     assert first.decisions == second.decisions

@@ -1,3 +1,11 @@
+"""Parse model output while preserving action schema and semantic validation.
+
+Literal control characters inside JSON strings are permitted for future runs
+only. Historical study outputs, outcomes and caches must not be reparsed,
+relabelled or regenerated: changing a decision changes subsequent system state.
+This tolerance does not apply to configuration or other JSON-loading paths.
+"""
+
 from __future__ import annotations
 
 import json
@@ -22,7 +30,7 @@ def extract_json(text: str) -> Optional[dict]:
     if start == -1 or end == -1 or end <= start:
         return None
     try:
-        parsed = json.loads(body[start : end + 1])
+        parsed = json.loads(body[start : end + 1], strict=False)
     except (ValueError, TypeError):
         return None
     return parsed if isinstance(parsed, dict) else None

@@ -107,7 +107,7 @@ def test_token_budget_exhaustion_and_provider_error_are_explicit(tmp_path):
         assert isinstance(agent.decide(obs), NoOp)
         assert agent.last_trace["outcome"] == outcome
         assert agent.last_trace["fallback"] is True
-        assert len(provider.messages) == 1
+        assert len(provider.messages) == (0 if options.get("max_tokens") == 0 else 1)
 
 
 def test_finalization_time_reserved_and_timeout_propagated(tmp_path, monkeypatch):

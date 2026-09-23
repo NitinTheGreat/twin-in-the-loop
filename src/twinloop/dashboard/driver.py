@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from ..sim.metrics import latency_ms, mean_latency, display_latency, rounded_latency
 
-import os
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -152,7 +151,7 @@ def build_config(
 
 def _provider(provider_name, config):
     if provider_name == "gemini":
-        return GeminiProvider(os.environ.get("GEMINI_API_KEY"))
+        return GeminiProvider()
     if provider_name == "local":
         return LocalProvider(config.llm)
     return ScriptedProvider()

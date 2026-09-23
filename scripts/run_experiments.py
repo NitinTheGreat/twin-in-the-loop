@@ -59,9 +59,9 @@ def _load_dotenv():
 PROVIDER_PRESETS = {
     "gemini": {
         "provider": "gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta",
+        "base_url": "https://aiplatform.googleapis.com",
         "model": "gemini-3.6-flash",
-        "api_key_env": "GEMINI_API_KEY",
+        "api_key_env": "",
     },
     "openai": {
         "provider": "cloud",
@@ -76,9 +76,7 @@ def _build_provider_factory(name, config):
     if name == "scripted":
         return lambda: ScriptedProvider()
     if config.llm.provider == "gemini":
-        api_key = os.environ.get(config.llm.api_key_env)
-        base_url = config.llm.base_url
-        return lambda: GeminiProvider(api_key, base_url)
+        return lambda: GeminiProvider()
     return None
 
 
@@ -130,9 +128,11 @@ def main() -> None:
         config.llm.api_key_env = args.api_key_env
 
     uses_llm = args.provider != "scripted"
-    needs_key = args.provider in ("gemini", "openai", "cloud")
+    needs_key = args.provider in ("openai", "cloud")
     if needs_key and not os.environ.get(config.llm.api_key_env):
         print(f"warning: {config.llm.api_key_env} is not set (checked environment and .env)")
+    if config.llm.provider == "gemini" and not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+        print("warning: GOOGLE_CLOUD_PROJECT is not set (checked environment and .env)")
     if uses_llm and "localhost" in config.llm.base_url and args.base_url is None:
         print(f"warning: targeting {config.llm.base_url}; a local server must be running or pass --base-url")
 
@@ -157,7 +157,11 @@ def main() -> None:
     if uses_llm:
         print(f"  model             : {config.llm.model}")
         print(f"  endpoint          : {config.llm.base_url}")
-        print(f"  api key env       : {config.llm.api_key_env}")
+        if config.llm.provider == "gemini":
+            print(f"  auth              : Vertex AI ADC, project {os.environ.get('GOOGLE_CLOUD_PROJECT')}, "
+                  f"location {os.environ.get('GOOGLE_CLOUD_LOCATION') or 'global'}")
+        else:
+            print(f"  api key env       : {config.llm.api_key_env}")
     print(f"  planned runs      : {plan.planned_runs}")
     print(f"  estimated LLM calls: {plan.estimated_llm_calls}")
     if args.dry_run:
