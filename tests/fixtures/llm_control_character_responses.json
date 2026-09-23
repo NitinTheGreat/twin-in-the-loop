@@ -1,0 +1,104 @@
+{
+  "source": "Expanded original study response caches; raw text copied without normalization or repair. Decoding this fixture reproduces the exact cached UTF-8 response text.",
+  "historical_outcomes_unchanged": true,
+  "cases": [
+    {
+      "id": "cached_literal_newline_scale_service",
+      "source_cache": "results/llm_descriptive_study/source/cache_w0/cache.json",
+      "cache_key": "d39eaa293ec1923e101b79377047b759c91fe2b0cdb0cab3ef63feeb2b8e2a08",
+      "text_sha256": "333201be97175bd45bc8104135b6b03a7421e36a8ac3ec9b5e5acc2f053164ec",
+      "text": "{\"thought\": \"Let's check service history for svc5 and svc4, or link metrics if possible. But tools are now disabled by the user prompt! Wait, the prompt says 'FINAL DECISION: tools are disabled. Use all evidence above and return one JSON object'.\nLet's analyze what we know:\n- svc5 is hosted on edge1, with p95=601ms/600 (FAIL), thr=22rps, qlen=0. Replicas=1. Memory=5.0. CPU utilization on edge1 is low (33%).\n- svc4 is hosted on edge0, with p95=581ms/600 (AT RISK), thr=27rps, qlen=0. Replicas=2.\n- svc5 has only 1 replica (`replicas: 1`), while running 22 rps. Scaling `svc5` up by 1 replica (`delta_replicas: 1`) will distribute the compute load / request handling for `svc5` and reduce its p95 latency.\nLet's verify options: scale_service for svc5.\nScale svc5 by delta_replicas = 1.\", \"action\": {\"type\": \"scale_service\", \"service_id\": \"svc5\", \"delta_replicas\": 1}}",
+      "expected_payload": {
+        "thought": "Let's check service history for svc5 and svc4, or link metrics if possible. But tools are now disabled by the user prompt! Wait, the prompt says 'FINAL DECISION: tools are disabled. Use all evidence above and return one JSON object'.\nLet's analyze what we know:\n- svc5 is hosted on edge1, with p95=601ms/600 (FAIL), thr=22rps, qlen=0. Replicas=1. Memory=5.0. CPU utilization on edge1 is low (33%).\n- svc4 is hosted on edge0, with p95=581ms/600 (AT RISK), thr=27rps, qlen=0. Replicas=2.\n- svc5 has only 1 replica (`replicas: 1`), while running 22 rps. Scaling `svc5` up by 1 replica (`delta_replicas: 1`) will distribute the compute load / request handling for `svc5` and reduce its p95 latency.\nLet's verify options: scale_service for svc5.\nScale svc5 by delta_replicas = 1.",
+        "action": {
+          "type": "scale_service",
+          "service_id": "svc5",
+          "delta_replicas": 1
+        }
+      },
+      "expected_action": {
+        "type": "scale_service",
+        "service_id": "svc5",
+        "delta_replicas": 1
+      },
+      "expected_outcome": "decision_produced"
+    },
+    {
+      "id": "cached_literal_newline_restart_service",
+      "source_cache": "results/llm_descriptive_study/source/cache_w0/cache.json",
+      "cache_key": "4ecaf2736e8b2c00e4eed7a27a680805a48d0a6ce551d5a4fc60f67f0a35d038",
+      "text_sha256": "db7dd5bb075c1a15dc9d10fae2137d7bb2e58dec26b50feadd76668c1857106c",
+      "text": "{\"thought\": \"Let's check service history / status for svc1 and svc3. Since tools are now disabled, let's analyze what we have:\nsvc1: host edge1, p95=missing/600 FAIL, avail=0.0%/99 FAIL, qlen=0, thr=0rps. On edge1, cpu utilization is low (23%), memory utilization is low. But svc1 has 0% availability and 0 rps throughput (missing metrics / crashed service / unresponsive process). Restarting svc1 is a logical remediation for a service that is down / 0% availability on a healthy node.\nsvc3: host edge3, p95=928ms, thr=59rps, 3 replicas on edge3.\n\nLet's check if restarting svc1 is the best action. svc1 has 0% availability, 0 rps throughput, p95 missing, while node edge1 is healthy. A restart of svc1 will bring it back up.\", \"action\": {\"type\": \"restart_service\", \"service_id\": \"svc1\"}}",
+      "expected_payload": {
+        "thought": "Let's check service history / status for svc1 and svc3. Since tools are now disabled, let's analyze what we have:\nsvc1: host edge1, p95=missing/600 FAIL, avail=0.0%/99 FAIL, qlen=0, thr=0rps. On edge1, cpu utilization is low (23%), memory utilization is low. But svc1 has 0% availability and 0 rps throughput (missing metrics / crashed service / unresponsive process). Restarting svc1 is a logical remediation for a service that is down / 0% availability on a healthy node.\nsvc3: host edge3, p95=928ms, thr=59rps, 3 replicas on edge3.\n\nLet's check if restarting svc1 is the best action. svc1 has 0% availability, 0 rps throughput, p95 missing, while node edge1 is healthy. A restart of svc1 will bring it back up.",
+        "action": {
+          "type": "restart_service",
+          "service_id": "svc1"
+        }
+      },
+      "expected_action": {
+        "type": "restart_service",
+        "service_id": "svc1"
+      },
+      "expected_outcome": "decision_produced"
+    },
+    {
+      "id": "cached_literal_newline_migrate_service",
+      "source_cache": "results/llm_descriptive_study/source/cache_w3/cache.json",
+      "cache_key": "dd9e56be1975123aade1d9768b5f7664f1763c1a5ee40bba1fd73ae91cf2e561",
+      "text_sha256": "96cad8fb612cd40c70f767802b096ad756ed2a496251249f357c3f8d79141e8b",
+      "text": "{\"thought\": \"Edge2 is DOWN. svc2 was hosted on edge2 (status: down) and has avail=0.0%. Migrating svc2 to a healthy node like edge0 is necessary to recover svc2.\nLet's double check node edge2 status and node edge0/edge1/edge3 status.\nedge2 is status down. svc2 is hosted on edge2.\nEdge0 has 30.8% utilisation, cpu_capacity 100, memory 10%.\nTherefore, migrating svc2 to edge0 will fix the complete failure of svc2.\", \"action\": {\"type\": \"migrate_service\", \"service_id\": \"svc2\", \"target_node_id\": \"edge0\"}}",
+      "expected_payload": {
+        "thought": "Edge2 is DOWN. svc2 was hosted on edge2 (status: down) and has avail=0.0%. Migrating svc2 to a healthy node like edge0 is necessary to recover svc2.\nLet's double check node edge2 status and node edge0/edge1/edge3 status.\nedge2 is status down. svc2 is hosted on edge2.\nEdge0 has 30.8% utilisation, cpu_capacity 100, memory 10%.\nTherefore, migrating svc2 to edge0 will fix the complete failure of svc2.",
+        "action": {
+          "type": "migrate_service",
+          "service_id": "svc2",
+          "target_node_id": "edge0"
+        }
+      },
+      "expected_action": {
+        "type": "migrate_service",
+        "service_id": "svc2",
+        "target_node_id": "edge0"
+      },
+      "expected_outcome": "decision_produced"
+    },
+    {
+      "id": "cached_literal_newline_no_op",
+      "source_cache": "results/llm_descriptive_study/source/cache_w1/cache.json",
+      "cache_key": "9a9d678d373e03a77b2da4c7c6bcb1108e3477eaa9879a7ec074397b2ef7c12e",
+      "text_sha256": "5adb34b90af5190acd7b331bdb42f440abeefe5eb1e567ba295a677b51ed5293",
+      "text": "{\"thought\": \"Let's review the situation:\n- SLO violations: 0.\n- At risk: svc3 (p95=553ms vs 600ms threshold) on edge3, svc1 (p95=530ms vs 600ms threshold) on edge1.\n- Both services have 100% availability, 0 queue length, 0 drops.\n- Both edge1 and edge3 have low CPU utilization (~40-50%) and low memory utilization (~10%).\n- Currently all services are meeting their SLO thresholds (< 600ms).\n- There is no active SLO violation or severe resource bottleneck. Migration or other disruptive actions carry real costs (downtime, dropped traffic).\n- Therefore, no_op is the safest and most appropriate action.\", \"action\": {\"type\": \"no_op\"}}",
+      "expected_payload": {
+        "thought": "Let's review the situation:\n- SLO violations: 0.\n- At risk: svc3 (p95=553ms vs 600ms threshold) on edge3, svc1 (p95=530ms vs 600ms threshold) on edge1.\n- Both services have 100% availability, 0 queue length, 0 drops.\n- Both edge1 and edge3 have low CPU utilization (~40-50%) and low memory utilization (~10%).\n- Currently all services are meeting their SLO thresholds (< 600ms).\n- There is no active SLO violation or severe resource bottleneck. Migration or other disruptive actions carry real costs (downtime, dropped traffic).\n- Therefore, no_op is the safest and most appropriate action.",
+        "action": {
+          "type": "no_op"
+        }
+      },
+      "expected_action": {
+        "type": "no_op"
+      },
+      "expected_outcome": "deliberate_no_op"
+    },
+    {
+      "id": "cached_unescaped_quotes_with_newline",
+      "source_cache": "results/llm_descriptive_study/source/cache_w2/cache.json",
+      "cache_key": "61704cd1fa175c2d19101f41a6f3ff893f27431beec14f0794a09d17c726a27e",
+      "text_sha256": "639c6fb0c729f477be2e4ef5da511325800bf2cd12b855918cb11a3ef177613b",
+      "text": "{\"thought\": \"Let's analyze the service history and network context.\nAt tick 19 and tick 20, throughput increased to 29 and 27 rps for svc1, and p95 latency rose to 656ms and 777ms.\nNode edge1 utilization is at ~63%.\nScaling svc1 by +1 replica (or migrating or scaling) can help handle the higher load / throughput without overload on a single replica.\nWait, let's look at available actions:\n1. scale_service: {\"type\": \"scale_service\", \"service_id\": \"svc1\", \"delta_replicas\": 1}\n2. migrate_service: causes downtime that drops traffic.\n3. scale_service distributes load across replicas, reducing latency.\n\nLet's check if scale_service is appropriate: svc1 currently has 1 replica. Scaling it up by 1 replica (delta_replicas: 1) will distribute requests and lower p95 latency under increased load.\", \"action\": {\"type\": \"scale_service\", \"service_id\": \"svc1\", \"delta_replicas\": 1}}",
+      "expected_payload": null,
+      "expected_action": null,
+      "expected_outcome": "final_parse_failure"
+    },
+    {
+      "id": "cached_unescaped_quotes_without_literal_controls",
+      "source_cache": "results/llm_descriptive_study/source/cache_w2/cache.json",
+      "cache_key": "060d21c1508e7c14326c11b3e48918dd95c8d3a57e0b72f085db7296706ebde1",
+      "text_sha256": "1997cbd0a3eb5cc2dcbd2985d9c4b416db63db3fed3541e448d0e098c6070d4e",
+      "text": "{\"thought\": \"Notice that migrating svc5 was rejected because it causes migration downtime/dropped requests and predicted more SLO violations than no-op (29 vs 28). Let's check scaling vs scale_service / throttle / restart / scale / reroute / no_op.\\nWait, scaling up replicas (`scale_service` with delta_replicas = 1) allows distributing load across multiple instances or increasing capacity without migrating or dropping traffic, OR maybe scale_service / scale_service for svc5 will handle high throughput (31rps vs 17-25rps in past ticks). Wait, can we scale svc5? Or is scale_service appropriate when throughput spikes and p95 increases?\\nLet's check if scaling svc5 by +1 is better, or scale_service / no_op / throttle_service.\\nWait! Let's examine `scale_service`: `{\"type\": \"scale_service\", \"service_id\": \"svc5\", \"delta_replicas\": 1}`.\\nWhen throughput increases to 30-31 rps, p95 spikes to ~665-940ms. Scaling up adds replicas to handle higher load without downtime. Adding 1 replica allows handling the traffic demand across edge nodes or within edge1.\", \"action\": {\"type\": \"scale_service\", \"service_id\": \"svc5\", \"delta_replicas\": 1}}",
+      "expected_payload": null,
+      "expected_action": null,
+      "expected_outcome": "final_parse_failure"
+    }
+  ]
+}

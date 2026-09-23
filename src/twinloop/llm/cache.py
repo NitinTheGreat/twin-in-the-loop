@@ -37,4 +37,6 @@ class ResponseCache:
             return
         self._data[key] = value
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps(self._data, sort_keys=True), encoding="utf-8")
+        temporary = self.path.with_suffix(self.path.suffix + ".tmp")
+        temporary.write_text(json.dumps(self._data, sort_keys=True), encoding="utf-8")
+        temporary.replace(self.path)
