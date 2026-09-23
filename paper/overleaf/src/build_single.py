@@ -133,14 +133,56 @@ def expand(match):
 for _ in range(3):
     src = re.sub(r"\\([A-Za-z]+)(?:\{\})?", expand, src)
 
+for old, new in (
+        ("are treated systematically in model predictive control~\\cite{rawlings}",
+         "are central design concerns in model predictive control~\\cite{rawlings}"),
+        ("MBPO studies the tradeoff between rollout length and model bias~\\cite{mbpo}",
+         "Model-based reinforcement learning studies the tradeoff between rollout length and compounding model bias~\\cite{mbpo}"),
+        ("value-aware model learning weights model error",
+         "value-gradient weighted model learning weights model error"),
+        ("a question extended to labelled Petri nets~\\cite{cabasino}",
+         "a question also studied for event patterns in labelled time Petri nets~\\cite{cabasino}"),
+        ("POMCP plans with a black-box simulator by sampling hidden states from a belief~\\cite{pomcp}",
+         "Online POMDP planners such as POMCP plan with a black-box simulator by sampling hidden states from a belief~\\cite{pomcp}"),
+        ("site-reliability practice documents how a failed replica can push load onto the survivors and trigger a cascade~\\cite{sre_cascade}",
+         "studies of production incidents show how load shifted onto surviving replicas can trigger self-sustaining cascading overload~\\cite{sre_cascade}"),
+        ("Site-reliability guidance on monitoring distinguishes symptoms from causes~\\cite{sre_monitoring} and describes cascading overload~\\cite{sre_cascade}.",
+         "Surveys of anomaly detection and root-cause analysis for microservice applications separate observed symptoms from root causes~\\cite{sre_monitoring}, and studies of production incidents characterise cascading, self-sustaining overload~\\cite{sre_cascade}."),
+        ("Robust model predictive shielding extends the idea to stochastic disturbances with sampled trajectories~\\cite{robustmps}.",
+         "Data-driven safety filters extend these ideas to uncertain and stochastic dynamics~\\cite{robustmps}.")):
+    assert src.count(old) == 1, old
+    src = src.replace(old, new)
+
+RENAMED = {"simplex": "bbsimplex", "mps": "dmps", "rawlings": "mpcreview", "mbpo": "mbrlsurvey",
+           "sampath": "robustdiag", "cabasino": "petridiag", "pomcp": "pomdpsurvey", "sre_cascade": "metastable",
+           "sre_monitoring": "rcasurvey", "crn": "stochsim", "robustmps": "ddsafety", "vaml": "vagram",
+           "wilcoxon": "mlstats", "holm": "multtest", "kleinrock": "probcomputing"}
+src = re.sub(r"\\cite\{([^}]+)\}",
+             lambda m: "\\cite{" + ",".join(RENAMED.get(k.strip(), k.strip()) for k in m.group(1).split(",")) + "}", src)
+
 old_bib = between(OLD, "\\begin{thebibliography}", "\\end{thebibliography}")
 items = dict(re.findall(r"\\bibitem\{([^}]+)\}\s*(.*?)(?=\n\s*\\bibitem|\n\s*\\end\{thebibliography\})", old_bib, re.S))
 items.update({
     "twingatedorch": "``Digital-twin validation gate between an optimisation agent and the execution layer in infrastructure orchestration,'' arXiv:2602.10900 and arXiv:2604.09705, 2026 (bibliographic details to be verified).",
-    "kleinrock": "L.~Kleinrock, \\emph{Queueing Systems, Volume 1: Theory}. New York, NY, USA: Wiley, 1975.",
-    "wilcoxon": "F.~Wilcoxon, ``Individual comparisons by ranking methods,'' \\emph{Biometrics Bulletin}, vol.~1, no.~6, pp.~80--83, 1945.",
-    "holm": "S.~Holm, ``A simple sequentially rejective multiple test procedure,'' \\emph{Scandinavian Journal of Statistics}, vol.~6, no.~2, pp.~65--70, 1979.",
+    "bbsimplex": "U.~Mehmood, S.~Sheikhi, S.~Bak, S.~A. Smolka, and S.~D. Stoller, ``The Black-Box Simplex architecture for runtime assurance of autonomous CPS,'' in \\emph{Proc. NASA Formal Methods Symp. (NFM)}, LNCS vol.~13260. Cham, Switzerland: Springer, 2022, doi:10.1007/978-3-031-06773-0\\_12.",
+    "dmps": "A.~Banerjee, K.~Rahmani, J.~Biswas, and I.~Dillig, ``Dynamic model predictive shielding for provably safe reinforcement learning,'' in \\emph{Proc. NeurIPS}, 2024.",
+    "mpcreview": "M.~Schwenzer, M.~Ay, T.~Bergs, and D.~Abel, ``Review on model predictive control: An engineering perspective,'' \\emph{Int. J. Adv. Manuf. Technol.}, vol.~117, pp.~1327--1349, 2021, doi:10.1007/s00170-021-07682-3.",
+    "mbrlsurvey": "F.-M. Luo, T.~Xu, H.~Lai, X.-H. Chen, W.~Zhang, and Y.~Yu, ``A survey on model-based reinforcement learning,'' \\emph{Science China Information Sciences}, vol.~67, 121101, 2024, doi:10.1007/s11432-022-3696-5.",
+    "robustdiag": "L.~K. Carvalho, M.~V. Moreira, and J.~C. Basilio, ``Comparative analysis of related notions of robust diagnosability of discrete-event systems,'' \\emph{Annual Reviews in Control}, vol.~51, pp.~23--36, 2021.",
+    "petridiag": "Y.~Pencol\\'e and A.~Subias, ``Diagnosability of event patterns in safe labeled time Petri nets: A model-checking approach,'' \\emph{IEEE Trans. Autom. Sci. Eng.}, vol.~19, no.~2, pp.~1151--1162, 2022.",
+    "pomdpsurvey": "M.~Lauri, D.~Hsu, and J.~Pajarinen, ``Partially observable Markov decision processes in robotics: A survey,'' \\emph{IEEE Trans. Robot.}, vol.~39, no.~1, pp.~21--40, 2023, doi:10.1109/TRO.2022.3200138.",
+    "metastable": "L.~Huang, M.~Magnusson, A.~B. Muralikrishna, S.~Estyak, R.~Isaacs, A.~Aghayev, T.~Zhu, and A.~Charapko, ``Metastable failures in the wild,'' in \\emph{Proc. USENIX Symp. Operating Systems Design and Implementation (OSDI)}, 2022.",
+    "rcasurvey": "J.~Soldani and A.~Brogi, ``Anomaly detection and failure root cause analysis in (micro)service-based cloud applications: A survey,'' \\emph{ACM Computing Surveys}, vol.~55, no.~3, 2022, doi:10.1145/3501297.",
+    "stochsim": "B.~L. Nelson and L.~Pei, \\emph{Foundations and Methods of Stochastic Simulation: A First Course}, 2nd ed. Cham, Switzerland: Springer, 2021, doi:10.1007/978-3-030-86194-0.",
+    "ddsafety": "K.~P. Wabersich, A.~J. Taylor, J.~J. Choi, K.~Sreenath, C.~J. Tomlin, A.~D. Ames, and M.~N. Zeilinger, ``Data-driven safety filters: Hamilton--Jacobi reachability, control barrier functions, and predictive methods for uncertain systems,'' \\emph{IEEE Control Systems Magazine}, vol.~43, no.~5, pp.~137--177, 2023.",
+    "vagram": "C.~Voelcker, V.~Liao, A.~Garg, and A.-m. Farahmand, ``Value gradient weighted model-based reinforcement learning,'' in \\emph{Proc. Int. Conf. Learning Representations (ICLR)}, 2022.",
+    "mlstats": "O.~Rainio, J.~Teuho, and R.~Kl\\'en, ``Evaluation metrics and statistical tests for machine learning,'' \\emph{Scientific Reports}, vol.~14, 6086, 2024, doi:10.1038/s41598-024-56706-x.",
+    "multtest": "O.~Menyhart, B.~Weltz, and B.~Gy\\H{o}rffy, ``MultipleTesting.com: A tool for life science researchers for multiple hypothesis testing correction,'' \\emph{PLoS ONE}, vol.~16, no.~6, e0245824, 2021, doi:10.1371/journal.pone.0245824.",
+    "probcomputing": "M.~Harchol-Balter, \\emph{Introduction to Probability for Computing}. Cambridge, U.K.: Cambridge University Press, 2023.",
 })
+for key in ("k8scontroller", "k8shpa", "langgraph"):
+    assert items[key].count("[Online].") == 1, key
+    items[key] = items[key].replace("[Online].", "Accessed: Sep.~23, 2026. [Online].")
 order = []
 for group in re.findall(r"\\cite\{([^}]+)\}", src):
     for key in group.split(","):

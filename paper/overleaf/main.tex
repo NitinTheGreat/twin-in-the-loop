@@ -50,21 +50,21 @@ Digital twin, validation gate, counterfactual evaluation, twin fidelity, edge ne
 
 \textbf{Digital twins as a pre-actuation safeguard.} A wrong action applied to a live network can cause lasting damage, so a recurring design places a digital twin between the decision maker and the network. The proposed change is first executed on the twin, and only changes predicted to be acceptable are applied. Aether coordinates network-operations agents with a network digital twin to validate configuration changes on an ISP laboratory replica~\cite{aether}, and recent process-plant work lets an LLM agent propose actions that are validated in simulation and re-prompted on failure~\cite{processplant}, and infrastructure-orchestration work treats the twin as a mandatory gate between an optimisation agent and the execution layer~\cite{twingatedorch}. The twin-gated pattern is therefore established; what is less established is how to measure what the twin contributes.
 
-\textbf{Lineage in safety-critical control.} The idea of checking an advanced controller's output against a model before actuation predates LLMs. The Simplex architecture separates a high-performance controller from a simple verified safety controller that takes over before failure~\cite{simplex}. Predictive safety filters forward-simulate a proposed input and minimally modify it when it cannot be certified~\cite{wabersich}, and model predictive shielding uses forward simulation to decide whether a learned policy may act or must hand control to a backup policy~\cite{mps}. Finite-horizon prediction, terminal conditions, and robustness to model error are treated systematically in model predictive control~\cite{rawlings}. Our gate is a deliberately simple member of this family.
+\textbf{Lineage in safety-critical control.} The idea of checking an advanced controller's output against a model before actuation predates LLMs. The Simplex architecture separates a high-performance controller from a simple verified safety controller that takes over before failure~\cite{bbsimplex}. Predictive safety filters forward-simulate a proposed input and minimally modify it when it cannot be certified~\cite{wabersich}, and model predictive shielding uses forward simulation to decide whether a learned policy may act or must hand control to a backup policy~\cite{dmps}. Finite-horizon prediction, terminal conditions, and robustness to model error are central design concerns in model predictive control~\cite{mpcreview}. Our gate is a deliberately simple member of this family.
 
 \textbf{Motivation: outcome improvement does not measure prediction.} Evaluating a twin gate is harder than building one. Real networks cannot be replayed, so the true consequence of a \emph{rejected} change is rarely observed, and evaluations tend to report outcome improvement over an ungated agent. That comparison conflates two sources of benefit: the gate's ability to tell good actions from bad ones, and the simple fact that it blocks something. If most of an agent's proposals are harmful, a gate that blocks everything looks excellent while predicting nothing. NetInjectBench makes this concrete for tool-using network agents by showing that a static allowlist reduces unsafe actions but destroys the usefulness of approved changes~\cite{netinjectbench}.
 
 \textbf{Motivation: safety must be reported with utility.} Security evaluations of agents have converged on reporting utility and attack success together, because either number alone can be optimised trivially. AgentDojo reports utility, utility under attack, and attack success side by side and cautions against reducing them to a single leaderboard~\cite{agentdojo}. The analogous requirement for twin gates is that harm prevented must be reported together with benefit preserved, and both must be compared with a no-prediction control.
 
-\textbf{Motivation: twins are never exact.} Any deployed twin differs from the system it models through observation noise, stale state, drifting parameters, forecast error, and simplified dynamics. Monotone gains with fidelity should not be assumed: in additive manufacturing, lower-fidelity twins can detect failures comparably to higher-fidelity ones~\cite{fidelityam}. Model-based reinforcement learning likewise studies how prediction length trades usefulness against compounding model bias~\cite{mbpo}. Fidelity is rarely varied systematically in agentic network settings, which motivates a controllable-fidelity twin.
+\textbf{Motivation: twins are never exact.} Any deployed twin differs from the system it models through observation noise, stale state, drifting parameters, forecast error, and simplified dynamics. Monotone gains with fidelity should not be assumed: in additive manufacturing, lower-fidelity twins can detect failures comparably to higher-fidelity ones~\cite{fidelityam}. Model-based reinforcement learning likewise studies how prediction length trades usefulness against compounding model bias~\cite{mbrlsurvey}. Fidelity is rarely varied systematically in agentic network settings, which motivates a controllable-fidelity twin.
 
-\textbf{Motivation: faults are only partially observable.} A controller sees symptoms, not causes, and a twin rolled forward from the current state cannot know which faults will arrive in the future. Whether a fault can be inferred from observed behaviour is a question of diagnosability that is distinct from state observability~\cite{sampath}, and planning under partial observability typically relies on sampling hidden states through a black-box simulator~\cite{pomcp}. We make this limitation explicit by rolling the twin forward \emph{fault-blind} and comparing it with a gate that can see the schedule.
+\textbf{Motivation: faults are only partially observable.} A controller sees symptoms, not causes, and a twin rolled forward from the current state cannot know which faults will arrive in the future. Whether a fault can be inferred from observed behaviour is a question of diagnosability that is distinct from state observability~\cite{robustdiag}, and planning under partial observability typically relies on sampling hidden states through a black-box simulator~\cite{pomdpsurvey}. We make this limitation explicit by rolling the twin forward \emph{fault-blind} and comparing it with a gate that can see the schedule.
 
-\textbf{Motivation: operational repair semantics matter.} Real repair actions have costs and interact. Production orchestrators implement reconciling control loops that drive observed state toward desired state~\cite{k8scontroller}, autoscalers use tolerances and stabilisation windows to avoid oscillation~\cite{k8shpa}, and site-reliability practice documents how a failed replica can push load onto the survivors and trigger a cascade~\cite{sre_cascade}. A testbed that treats restarts and migrations as free would overstate the value of acting, so our simulator charges explicit downtime and drops.
+\textbf{Motivation: operational repair semantics matter.} Real repair actions have costs and interact. Production orchestrators implement reconciling control loops that drive observed state toward desired state~\cite{k8scontroller}, autoscalers use tolerances and stabilisation windows to avoid oscillation~\cite{k8shpa}, and studies of production incidents show how load shifted onto surviving replicas can trigger self-sustaining cascading overload~\cite{metastable}. A testbed that treats restarts and migrations as free would overstate the value of acting, so our simulator charges explicit downtime and drops.
 
 \textbf{Motivation: bounded agents need bounded evaluation.} Agent loops are bounded by step or tool budgets, and behaviour at the bound affects outcomes. Budget-aware tool use shows that exposing the remaining budget changes how agents scale~\cite{budgetaware}, and graph-based agent frameworks raise explicit errors when recursion limits are reached~\cite{langgraph}. Our controllers operate under a bounded retry budget with a no-op fallback, so the gate's rejection behaviour and the controller's retry behaviour must be analysed together.
 
-\textbf{Scope: a measurement instrument, not a new safety guarantee.} Using common random numbers to compare alternatives in simulation is standard~\cite{crn}, and it has recently been applied to rollout-based planning, where the continuation policy affects the variance of relative utilities~\cite{yadav}. Action-level safety labels and shields have been formalised with explicit false positives and negatives~\cite{rulebasedshield}, and safe and constrained reinforcement learning has been surveyed extensively~\cite{saferlsurvey}. We do not claim that twin-gated validation, paired simulation, or shielding is new. The contribution is a testbed and protocol that isolate what the twin's \emph{prediction} adds, run on a synthetic simulator whose limits are stated in Section~\ref{sec:limits}.
+\textbf{Scope: a measurement instrument, not a new safety guarantee.} Using common random numbers to compare alternatives in simulation is standard~\cite{stochsim}, and it has recently been applied to rollout-based planning, where the continuation policy affects the variance of relative utilities~\cite{yadav}. Action-level safety labels and shields have been formalised with explicit false positives and negatives~\cite{rulebasedshield}, and safe and constrained reinforcement learning has been surveyed extensively~\cite{saferlsurvey}. We do not claim that twin-gated validation, paired simulation, or shielding is new. The contribution is a testbed and protocol that isolate what the twin's \emph{prediction} adds, run on a synthetic simulator whose limits are stated in Section~\ref{sec:limits}.
 
 \textbf{Contributions.} Building on the twin-gate architecture of prior work~\cite{aether,processplant,twingatedorch}, the paper makes four contributions. (i) A controller-agnostic measurement method that labels every proposal, including rejected ones, with a paired counterfactual harm delta from the real system and scores every twin-gated arm against a reject-all gate on the same seeds. (ii) A characterisation of how the twin's value depends on fidelity along five controllable axes, including a control that holds the twin's queueing model constant. (iii) Results at 150 paired seeds for two proposers, with a live-model study as one further, descriptive proposer. (iv) A methodological finding that local counterfactuals do not compose into episode effects, with its mechanism.
 
@@ -90,17 +90,17 @@ Digital twin, validation gate, counterfactual evaluation, twin fidelity, edge ne
 
 \textbf{Safety versus utility for tool-using agents.} NetInjectBench reports unsafe tool-action rates for network agents under indirect prompt injection and shows that a static allowlist achieves safety at the cost of approved-change usefulness~\cite{netinjectbench}. AgentDojo reports utility and attack success jointly~\cite{agentdojo}. Our reject-all ablation applies the same principle to a closed-loop network setting: a gate that never approves anything is the baseline that prediction must beat.
 
-\textbf{Predictive safety filters and shielding.} Simplex~\cite{simplex}, predictive safety filters~\cite{wabersich}, and model predictive shielding~\cite{mps} forward-simulate a proposed action and fall back to a backup policy. Robust model predictive shielding extends the idea to stochastic disturbances with sampled trajectories~\cite{robustmps}. These methods provide recoverability guarantees under model assumptions; our gate provides none. It approves an action if predicted violations over a finite horizon are no worse than those of a no-op.
+\textbf{Predictive safety filters and shielding.} Simplex~\cite{bbsimplex}, predictive safety filters~\cite{wabersich}, and model predictive shielding~\cite{dmps} forward-simulate a proposed action and fall back to a backup policy. Data-driven safety filters extend these ideas to uncertain and stochastic dynamics~\cite{ddsafety}. These methods provide recoverability guarantees under model assumptions; our gate provides none. It approves an action if predicted violations over a finite horizon are no worse than those of a no-op.
 
 \textbf{Shields and safe reinforcement learning.} Rule-based shields define ground-truth safety labels on state--action pairs and discuss false positives and negatives of a binary shield~\cite{rulebasedshield}. A recent survey maps safe and constrained reinforcement learning across single- and multi-agent settings~\cite{saferlsurvey}. We borrow the classifier view of a shield but add closed-loop episode outcomes and no-prediction controls, since classifier accuracy alone does not establish operational value.
 
-\textbf{Model fidelity and decision-aware modelling.} Su \emph{et al.} vary six digital-twin attributes for material-extrusion failure detection and find that lower-fidelity twins can perform comparably~\cite{fidelityam}. MBPO studies the tradeoff between rollout length and model bias~\cite{mbpo}, and value-aware model learning weights model error by its effect on decisions~\cite{vaml}. Both lines suggest that the relevant question is not how accurate a twin is but whether its errors change decisions, which our fidelity sweep and composition analysis test directly.
+\textbf{Model fidelity and decision-aware modelling.} Su \emph{et al.} vary six digital-twin attributes for material-extrusion failure detection and find that lower-fidelity twins can perform comparably~\cite{fidelityam}. Model-based reinforcement learning studies the tradeoff between rollout length and compounding model bias~\cite{mbrlsurvey}, and value-gradient weighted model learning weights model error by its effect on decisions~\cite{vagram}. Both lines suggest that the relevant question is not how accurate a twin is but whether its errors change decisions, which our fidelity sweep and composition analysis test directly.
 
-\textbf{Common random numbers and paired simulation.} Common random numbers reduce the variance of differences between simulated alternatives~\cite{crn}. Yadav \emph{et al.} use them for simulation-based planning with rollouts and show that the continuation policy affects relative-utility variance~\cite{yadav}. Our paired action/no-op forks implement this established technique; they are not a new causal method, and our labels inherit the no-op continuation assumption.
+\textbf{Common random numbers and paired simulation.} Common random numbers reduce the variance of differences between simulated alternatives~\cite{stochsim}. Yadav \emph{et al.} use them for simulation-based planning with rollouts and show that the continuation policy affects relative-utility variance~\cite{yadav}. Our paired action/no-op forks implement this established technique; they are not a new causal method, and our labels inherit the no-op continuation assumption.
 
-\textbf{Diagnosability and planning under partial observability.} Diagnosability asks whether observed behaviour can establish that a fault occurred~\cite{sampath}, a question extended to labelled Petri nets~\cite{cabasino}. POMCP plans with a black-box simulator by sampling hidden states from a belief~\cite{pomcp}. Our fault-blind twin sits at the simplest end of this space: it assumes current faults persist and future faults do not occur, and a schedule-aware gate quantifies the cost of that assumption.
+\textbf{Diagnosability and planning under partial observability.} Diagnosability asks whether observed behaviour can establish that a fault occurred~\cite{robustdiag}, a question also studied for event patterns in labelled time Petri nets~\cite{petridiag}. Online POMDP planners such as POMCP plan with a black-box simulator by sampling hidden states from a belief~\cite{pomdpsurvey}. Our fault-blind twin sits at the simplest end of this space: it assumes current faults persist and future faults do not occur, and a schedule-aware gate quantifies the cost of that assumption.
 
-\textbf{Operational control loops and observability practice.} Kubernetes controllers reconcile observed and desired state~\cite{k8scontroller}, and the HorizontalPodAutoscaler uses metric ratios, tolerances, and stabilisation windows~\cite{k8shpa}. Site-reliability guidance on monitoring distinguishes symptoms from causes~\cite{sre_monitoring} and describes cascading overload~\cite{sre_cascade}. These practices inform our action costs and SLO definitions, but production systems rarely log counterfactual outcomes of rejected changes, which is why a deterministic testbed is useful.
+\textbf{Operational control loops and observability practice.} Kubernetes controllers reconcile observed and desired state~\cite{k8scontroller}, and the HorizontalPodAutoscaler uses metric ratios, tolerances, and stabilisation windows~\cite{k8shpa}. Surveys of anomaly detection and root-cause analysis for microservice applications separate observed symptoms from root causes~\cite{rcasurvey}, and studies of production incidents characterise cascading, self-sustaining overload~\cite{metastable}. These practices inform our action costs and SLO definitions, but production systems rarely log counterfactual outcomes of rejected changes, which is why a deterministic testbed is useful.
 
 \textbf{Twin-gated orchestration.} Recent infrastructure-orchestration work describes a digital twin as a mandatory validation gate between an optimisation agent and the execution layer, with failed candidates returned to the agent for re-optimisation~\cite{twingatedorch}. This is the gate-plus-retry loop we adopt; like the other twin-gate studies, it does not score rejected candidates against a counterfactual or compare with a reject-all gate.
 
@@ -118,7 +118,7 @@ Process plant~\cite{processplant} & Industrial process control & Simulation vali
 MicroRemed~\cite{microremed} & Microservices & None (proposer benchmark) & Recovery success & Measures proposer; we measure the gate \\
 NIKA~\cite{nika}, NetAgentBench~\cite{netagentbench} & Network troubleshooting, configuration & None (proposer benchmark) & Diagnosis and configuration correctness & Richer networks; no counterfactual labels \\
 NetInjectBench~\cite{netinjectbench} & Network agent security & Allowlist and defences & Unsafe-action rate with utility & Same safety--utility principle, open-loop \\
-Predictive safety filter~\cite{wabersich}, MPS~\cite{mps} & Continuous control & Forward simulation with backup policy & Constraint satisfaction guarantees & Theoretical lineage; our gate gives no guarantee \\
+Predictive safety filter~\cite{wabersich}, MPS~\cite{dmps} & Continuous control & Forward simulation with backup policy & Constraint satisfaction guarantees & Theoretical lineage; our gate gives no guarantee \\
 Rule-based shield~\cite{rulebasedshield} & Reinforcement learning & Learned action-level shield & False positives / negatives & Classifier view we adopt and extend \\
 Su \emph{et al.}~\cite{fidelityam} & Additive manufacturing & Digital-twin failure detection & Detection across fidelity levels & Fidelity need not be monotone; we test for gating \\
 Orchestration twin gate~\cite{twingatedorch} & Compute-infrastructure orchestration & Twin as mandatory gate with re-optimisation & Constraint satisfaction of candidates & Same gate-plus-retry loop; no counterfactual or reject-all control \\
@@ -319,7 +319,7 @@ Figure~\ref{fig:flow} shows one decision, and Algorithm~\ref{alg:episode} gives 
 
 \subsection{Counterfactual Labels}
 
-For every proposal, including rejected ones and retries, an offline labeller forks the \emph{real} simulator with the fault schedule visible. It rolls out two branches that share exogenous randomness~\cite{crn}: the action followed by \texttt{no\_op}, and \texttt{no\_op} throughout, each for $H=20$ ticks. The harm delta is
+For every proposal, including rejected ones and retries, an offline labeller forks the \emph{real} simulator with the fault schedule visible. It rolls out two branches that share exogenous randomness~\cite{stochsim}: the action followed by \texttt{no\_op}, and \texttt{no\_op} throughout, each for $H=20$ ticks. The harm delta is
 \begin{equation}
 D(a) = V_H(a) - V_H(\texttt{no\_op}).
 \label{eq:delta}
@@ -349,7 +349,7 @@ Reject-all has $\mathrm{BP}=0$ and $\mathrm{HP}=1$ by construction.
 \end{equation}
 whose mean over seeds we call \netSD{}; negative means the approved set is locally better than rejecting everything. It is compared with the observed paired difference $\delta_s=V_s^{\text{gate}}-V_s^{\text{reject-all}}$.
 
-\textbf{Statistical tests.} Paired differences are zero-inflated, so the primary test is the exact Wilcoxon signed-rank test~\cite{wilcoxon}, computed by dynamic programming with zero differences dropped. Holm correction~\cite{holm} is applied over the 12 comparisons per controller and condition. Paired $t$-intervals and seed-level percentile bootstrap intervals with 5{,}000 resamples, sharing seeds across arms, are reported. With $m$ non-tied pairs the smallest attainable two-sided exact $p$-value is
+\textbf{Statistical tests.} Paired differences are zero-inflated, so the primary test is the exact Wilcoxon signed-rank test~\cite{mlstats}, computed by dynamic programming with zero differences dropped. Holm correction~\cite{multtest} is applied over the 12 comparisons per controller and condition. Paired $t$-intervals and seed-level percentile bootstrap intervals with 5{,}000 resamples, sharing seeds across arms, are reported. With $m$ non-tied pairs the smallest attainable two-sided exact $p$-value is
 \begin{equation}
 p_{\min}(m)=2/2^{m}.
 \label{eq:pmin}
@@ -362,7 +362,7 @@ All gates run with identical seeds, faults and controller. \emph{Ungated} applie
 
 \subsection{Implementation, Hardware and Simulator Validation}
 
-The system is implemented in Python~3.11 with Pydantic schemas, LangGraph and a Google Gen AI client for Vertex AI. The testbed is entirely software: no physical IoT hardware or circuit is used, so no circuit diagram or hardware photograph applies. The simulator's queue reproduces the M/M/1 mean queue length $L_q=\rho^2/(1-\rho)$~\cite{kleinrock}: at $\rho=0.6$ ($L_q=0.90$) the measured mean over 360{,}000 ticks lies within the test's 15\% tolerance. This validates one load regime, not all network behaviour.
+The system is implemented in Python~3.11 with Pydantic schemas, LangGraph and a Google Gen AI client for Vertex AI. The testbed is entirely software: no physical IoT hardware or circuit is used, so no circuit diagram or hardware photograph applies. The simulator's queue reproduces the M/M/1 mean queue length $L_q=\rho^2/(1-\rho)$~\cite{probcomputing}: at $\rho=0.6$ ($L_q=0.90$) the measured mean over 360{,}000 ticks lies within the test's 15\% tolerance. This validates one load regime, not all network behaviour.
 
 \section{Experimental Results and Discussion}
 
@@ -587,7 +587,7 @@ Fidelity & Expected & Actual & Expected & Actual \\
 
 \textbf{Incomplete cost accounting.} The historical live study retained input and visible-output tokens but not thinking tokens or failed-request usage; its rate-card figure (\$10.53 for 5{,}644 billed calls) is not an invoice.
 
-\textbf{Future work.} The live-model evidence is a single model, prompt and cache realisation at 30 seeds. The normal-approximation requirement computed from the 30-seed data is $n=72$ seeds for 80\% power on the twin@1.0 $-$ reject-all comparison, and a 72-seed live-model confirmation run is scheduled. A workload with more restart and migration opportunities per episode would raise the benefit ceiling more efficiently than more seeds, and fault-arrival uncertainty could be modelled with legitimately available information such as disturbance ensembles~\cite{robustmps,pomcp}.
+\textbf{Future work.} The live-model evidence is a single model, prompt and cache realisation at 30 seeds. The normal-approximation requirement computed from the 30-seed data is $n=72$ seeds for 80\% power on the twin@1.0 $-$ reject-all comparison, and a 72-seed live-model confirmation run is scheduled. A workload with more restart and migration opportunities per episode would raise the benefit ceiling more efficiently than more seeds, and fault-arrival uncertainty could be modelled with legitimately available information such as disturbance ensembles~\cite{ddsafety,pomdpsurvey}.
 
 \section{Conclusion}
 Comparing a twin gate with reject-all on counterfactually labelled proposals separates what the twin predicts from what it blocks. On 150 seeds the twin's value depends strongly on fidelity: low fidelity is worse than no gate, and the net local benefit crosses zero near 0.549 once the queueing model is held constant. The episode-level gain is real for one controller, small, concentrated in a few seeds and bounded by the benefit reject-all discards. Classifier quality should be read on the $\tau=\theta$ diagonal, and local counterfactual metrics describe the filter but do not compose into episode effects.
@@ -615,13 +615,13 @@ All data are generated by the simulator and are reproducible from the seeds repo
 
 \bibitem{twingatedorch} ``Digital-twin validation gate between an optimisation agent and the execution layer in infrastructure orchestration,'' arXiv:2602.10900 and arXiv:2604.09705, 2026 (bibliographic details to be verified).
 
-\bibitem{simplex} M.~Rivera \emph{et al.}, ``An architectural description of the Simplex architecture,'' Software Engineering Institute, Carnegie Mellon University, Tech. Rep. CMU/SEI-96-TR-006, 1996.
+\bibitem{bbsimplex} U.~Mehmood, S.~Sheikhi, S.~Bak, S.~A. Smolka, and S.~D. Stoller, ``The Black-Box Simplex architecture for runtime assurance of autonomous CPS,'' in \emph{Proc. NASA Formal Methods Symp. (NFM)}, LNCS vol.~13260. Cham, Switzerland: Springer, 2022, doi:10.1007/978-3-031-06773-0\_12.
 
 \bibitem{wabersich} K.~P. Wabersich and M.~N. Zeilinger, ``A predictive safety filter for learning-based control of constrained nonlinear dynamical systems,'' \emph{Automatica}, vol.~129, 109597, 2021, doi:10.1016/j.automatica.2021.109597.
 
-\bibitem{mps} O.~Bastani, ``Safe reinforcement learning with nonlinear dynamics via model predictive shielding,'' arXiv:1905.10691, 2019.
+\bibitem{dmps} A.~Banerjee, K.~Rahmani, J.~Biswas, and I.~Dillig, ``Dynamic model predictive shielding for provably safe reinforcement learning,'' in \emph{Proc. NeurIPS}, 2024.
 
-\bibitem{rawlings} J.~B. Rawlings, D.~Q. Mayne, and M.~M. Diehl, \emph{Model Predictive Control: Theory, Computation, and Design}, 2nd ed. Madison, WI, USA: Nob Hill Publishing, 2017.
+\bibitem{mpcreview} M.~Schwenzer, M.~Ay, T.~Bergs, and D.~Abel, ``Review on model predictive control: An engineering perspective,'' \emph{Int. J. Adv. Manuf. Technol.}, vol.~117, pp.~1327--1349, 2021, doi:10.1007/s00170-021-07682-3.
 
 \bibitem{netinjectbench} ``NetInjectBench: Benchmarking indirect prompt injection in tool-using large language model agents for network operations,'' arXiv:2607.10490, 2026.
 
@@ -629,23 +629,23 @@ All data are generated by the simulator and are reproducible from the seeds repo
 
 \bibitem{fidelityam} C.~Su, B.~Hicks, and A.~Nassehi, ``Investigating the influence of fidelity on the capability of a digital twin to detect material extrusion failures,'' \emph{Journal of Intelligent Manufacturing}, vol.~35, pp.~2263--2276, 2024, doi:10.1007/s10845-023-02144-x.
 
-\bibitem{mbpo} M.~Janner, J.~Fu, M.~Zhang, and S.~Levine, ``When to trust your model: Model-based policy optimization,'' in \emph{Proc. NeurIPS}, 2019.
+\bibitem{mbrlsurvey} F.-M. Luo, T.~Xu, H.~Lai, X.-H. Chen, W.~Zhang, and Y.~Yu, ``A survey on model-based reinforcement learning,'' \emph{Science China Information Sciences}, vol.~67, 121101, 2024, doi:10.1007/s11432-022-3696-5.
 
-\bibitem{sampath} M.~Sampath, R.~Sengupta, S.~Lafortune, K.~Sinnamohideen, and D.~Teneketzis, ``Diagnosability of discrete-event systems,'' \emph{IEEE Transactions on Automatic Control}, vol.~40, no.~9, pp.~1555--1575, 1995, doi:10.1109/9.412626.
+\bibitem{robustdiag} L.~K. Carvalho, M.~V. Moreira, and J.~C. Basilio, ``Comparative analysis of related notions of robust diagnosability of discrete-event systems,'' \emph{Annual Reviews in Control}, vol.~51, pp.~23--36, 2021.
 
-\bibitem{pomcp} D.~Silver and J.~Veness, ``Monte-Carlo planning in large POMDPs,'' in \emph{Proc. NeurIPS}, 2010.
+\bibitem{pomdpsurvey} M.~Lauri, D.~Hsu, and J.~Pajarinen, ``Partially observable Markov decision processes in robotics: A survey,'' \emph{IEEE Trans. Robot.}, vol.~39, no.~1, pp.~21--40, 2023, doi:10.1109/TRO.2022.3200138.
 
-\bibitem{k8scontroller} The Kubernetes Authors, ``Controllers,'' Kubernetes documentation. [Online]. Available: \url{https://kubernetes.io/docs/concepts/architecture/controller/}
+\bibitem{k8scontroller} The Kubernetes Authors, ``Controllers,'' Kubernetes documentation. Accessed: Sep.~23, 2026. [Online]. Available: \url{https://kubernetes.io/docs/concepts/architecture/controller/}
 
-\bibitem{k8shpa} The Kubernetes Authors, ``Horizontal Pod Autoscaling,'' Kubernetes documentation. [Online]. Available: \url{https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/}
+\bibitem{k8shpa} The Kubernetes Authors, ``Horizontal Pod Autoscaling,'' Kubernetes documentation. Accessed: Sep.~23, 2026. [Online]. Available: \url{https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/}
 
-\bibitem{sre_cascade} B.~Beyer, C.~Jones, J.~Petoff, and N.~R. Murphy, Eds., ``Addressing cascading failures,'' in \emph{Site Reliability Engineering: How Google Runs Production Systems}. Sebastopol, CA, USA: O'Reilly Media, 2016.
+\bibitem{metastable} L.~Huang, M.~Magnusson, A.~B. Muralikrishna, S.~Estyak, R.~Isaacs, A.~Aghayev, T.~Zhu, and A.~Charapko, ``Metastable failures in the wild,'' in \emph{Proc. USENIX Symp. Operating Systems Design and Implementation (OSDI)}, 2022.
 
 \bibitem{budgetaware} Liu \emph{et al.}, ``Budget-aware tool use enables effective agent scaling,'' arXiv:2511.17006, 2025.
 
-\bibitem{langgraph} LangChain, ``Graph API: Recursion limit,'' LangGraph documentation. [Online]. Available: \url{https://docs.langchain.com/oss/python/langgraph/graph-api}
+\bibitem{langgraph} LangChain, ``Graph API: Recursion limit,'' LangGraph documentation. Accessed: Sep.~23, 2026. [Online]. Available: \url{https://docs.langchain.com/oss/python/langgraph/graph-api}
 
-\bibitem{crn} W.-N. Yang and B.~L. Nelson, ``Using common random numbers and control variates in multiple-comparison procedures,'' \emph{Operations Research}, vol.~39, no.~4, pp.~583--591, 1991, doi:10.1287/opre.39.4.583.
+\bibitem{stochsim} B.~L. Nelson and L.~Pei, \emph{Foundations and Methods of Stochastic Simulation: A First Course}, 2nd ed. Cham, Switzerland: Springer, 2021, doi:10.1007/978-3-030-86194-0.
 
 \bibitem{yadav} Yadav \emph{et al.}, ``Using common random numbers for simulation-based planning with rollouts,'' in \emph{Proc. Reinforcement Learning Conference (RLC)}, 2026.
 
@@ -655,19 +655,19 @@ All data are generated by the simulator and are reproducible from the seeds repo
 
 \bibitem{slbench} ``SLBench,'' arXiv:2607.09016, 2026.
 
-\bibitem{robustmps} S.~Li and O.~Bastani, ``Robust model predictive shielding for safe reinforcement learning with stochastic dynamics,'' arXiv:1910.10885, 2019.
+\bibitem{ddsafety} K.~P. Wabersich, A.~J. Taylor, J.~J. Choi, K.~Sreenath, C.~J. Tomlin, A.~D. Ames, and M.~N. Zeilinger, ``Data-driven safety filters: Hamilton--Jacobi reachability, control barrier functions, and predictive methods for uncertain systems,'' \emph{IEEE Control Systems Magazine}, vol.~43, no.~5, pp.~137--177, 2023.
 
-\bibitem{vaml} A.-m. Farahmand, ``Iterative value-aware model learning,'' in \emph{Proc. NeurIPS}, 2018.
+\bibitem{vagram} C.~Voelcker, V.~Liao, A.~Garg, and A.-m. Farahmand, ``Value gradient weighted model-based reinforcement learning,'' in \emph{Proc. Int. Conf. Learning Representations (ICLR)}, 2022.
 
-\bibitem{cabasino} M.~P. Cabasino, A.~Giua, and C.~Seatzu, ``Diagnosability of discrete-event systems using labeled Petri nets,'' \emph{IEEE Transactions on Automation Science and Engineering}, 2014, doi:10.1109/TASE.2013.2289360.
+\bibitem{petridiag} Y.~Pencol\'e and A.~Subias, ``Diagnosability of event patterns in safe labeled time Petri nets: A model-checking approach,'' \emph{IEEE Trans. Autom. Sci. Eng.}, vol.~19, no.~2, pp.~1151--1162, 2022.
 
-\bibitem{sre_monitoring} B.~Beyer, C.~Jones, J.~Petoff, and N.~R. Murphy, Eds., ``Monitoring distributed systems,'' in \emph{Site Reliability Engineering: How Google Runs Production Systems}. Sebastopol, CA, USA: O'Reilly Media, 2016.
+\bibitem{rcasurvey} J.~Soldani and A.~Brogi, ``Anomaly detection and failure root cause analysis in (micro)service-based cloud applications: A survey,'' \emph{ACM Computing Surveys}, vol.~55, no.~3, 2022, doi:10.1145/3501297.
 
-\bibitem{wilcoxon} F.~Wilcoxon, ``Individual comparisons by ranking methods,'' \emph{Biometrics Bulletin}, vol.~1, no.~6, pp.~80--83, 1945.
+\bibitem{mlstats} O.~Rainio, J.~Teuho, and R.~Kl\'en, ``Evaluation metrics and statistical tests for machine learning,'' \emph{Scientific Reports}, vol.~14, 6086, 2024, doi:10.1038/s41598-024-56706-x.
 
-\bibitem{holm} S.~Holm, ``A simple sequentially rejective multiple test procedure,'' \emph{Scandinavian Journal of Statistics}, vol.~6, no.~2, pp.~65--70, 1979.
+\bibitem{multtest} O.~Menyhart, B.~Weltz, and B.~Gy\H{o}rffy, ``MultipleTesting.com: A tool for life science researchers for multiple hypothesis testing correction,'' \emph{PLoS ONE}, vol.~16, no.~6, e0245824, 2021, doi:10.1371/journal.pone.0245824.
 
-\bibitem{kleinrock} L.~Kleinrock, \emph{Queueing Systems, Volume 1: Theory}. New York, NY, USA: Wiley, 1975.
+\bibitem{probcomputing} M.~Harchol-Balter, \emph{Introduction to Probability for Computing}. Cambridge, U.K.: Cambridge University Press, 2023.
 
 \end{thebibliography}
 
