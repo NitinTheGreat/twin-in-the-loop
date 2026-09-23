@@ -1,0 +1,87 @@
+{
+  "primary_archive": {
+    "path": "docs/research/llm_descriptive_study_artifacts.zip",
+    "bytes": 2414624,
+    "sha256": "94591ad27f863e2f799d8b25d73967a6aa7d578a3badb06878805c7c4501acea"
+  },
+  "billing_attempt_archive": {
+    "path": "docs/research/llm_descriptive_study_billing_attempt.zip",
+    "bytes": 3506479,
+    "sha256": "95e4cc7835d38a544f5863b5727e73c38232ecdc92667c284305c091848241b1"
+  },
+  "primary_study": {
+    "episodes": 120,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ],
+    "arms": [
+      "ungated",
+      "always_reject",
+      "twin@1.0",
+      "twin@0.6"
+    ],
+    "decision_points": 1440,
+    "attempts": 2110,
+    "non_noop_candidates": 1115,
+    "simulator_mismatches": 0,
+    "cache_replay_attempt_status": {
+      "matched": 2097,
+      "different": 4,
+      "cache_miss": 9
+    },
+    "provider_calls_during_audit": 0,
+    "audit_incremental_cost_usd": 0,
+    "source_file_hashes": "source_manifest.json inside primary archive",
+    "runtime": "runtime_snapshot inside primary archive; contains original parser and LLMAgent behavior"
+  },
+  "extract_command": "Expand-Archive -LiteralPath docs/research/llm_descriptive_study_artifacts.zip -DestinationPath results/llm_descriptive_study -Force",
+  "replay_command": ".\\.venv\\Scripts\\python.exe scripts/llm_study_replay.py --historical --source results/llm_descriptive_study/source --output results/llm_descriptive_study --workers 4",
+  "replay_policy": "Historical mode imports frozen runtime_snapshot before current repository modules. Recomputes original actions and simulator; full cache-only diagnostics reproduce 2097 attempts, and all13 historical timeouts use original action traces. Network provider always disabled.",
+  "paper_main_sha256": "0fade78294d1056aa49ec3f0385297e605b8c9650814b5f07e319efe2bcd1686",
+  "billing_attempt_summary": {
+    "purpose": "Aborted corrected study: audit evidence only, excluded from the primary descriptive study.",
+    "completed_episodes": 71,
+    "journal_events": {
+      "response": 4543,
+      "provider_error": 182
+    },
+    "successful_new_provider_responses": 0,
+    "cache_response_events": 4543,
+    "provider_error_events": 182,
+    "diagnostic_events_stored_separately": true,
+    "completed_episode_replay_audit": "live_partial_replay_audit.json",
+    "current_source_files_differing_from_launch_manifest": [
+      "src/twinloop/llm/budget.py",
+      "src/twinloop/llm/client.py"
+    ]
+  }
+}
