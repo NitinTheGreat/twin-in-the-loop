@@ -172,11 +172,23 @@ class LLMAgent:
         action = None
         outcome = "final_parse_failure"
         final_call = False
-        deadline = time.perf_counter() + self.config.react_timeout_seconds
+        clock_source = getattr(self, "clock", time.perf_counter)
+        clock_offsets = []
+        clock_origin = None
+
+        def clock():
+            nonlocal clock_origin
+            current = clock_source()
+            if clock_origin is None:
+                clock_origin = current
+            clock_offsets.append(current - clock_origin)
+            return current
+
+        deadline = clock() + self.config.react_timeout_seconds
         reserve = self.config.react_timeout_seconds * self.config.react_final_reserve_fraction
 
         for index in range(self.config.react_max_steps):
-            remaining = deadline - time.perf_counter()
+            remaining = deadline - clock()
             if remaining <= 0:
                 outcome = "timeout"
                 break
@@ -208,8 +220,7 @@ class LLMAgent:
                 outcome = "timeout" if isinstance(error.reason, TimeoutError) else "provider_error"
                 break
 
-            # A provider that returns after its deadline cannot produce an on-time decision.
-            if time.perf_counter() >= deadline:
+            if clock() >= deadline:
                 outcome = "timeout"
                 break
             payload = extract_json(text)
@@ -277,5 +288,6 @@ class LLMAgent:
             "action_type": action.type,
             "feedback_present": feedback is not None,
             "feedback_changed": action != rejected_action if rejected_action is not None else None,
+            "clock_offsets": clock_offsets,
         }
         return action
