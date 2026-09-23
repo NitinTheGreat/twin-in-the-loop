@@ -12,6 +12,16 @@ def isolated_dashboard_cache(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
 
 
+@pytest.fixture(scope="session")
+def streamlit_app_test():
+    from streamlit.testing.v1 import app_test
+
+    try:
+        yield app_test.AppTest
+    finally:
+        app_test.TMP_DIR.cleanup()
+
+
 def test_driver_scripted_episode_structure():
     view = run_instrumented_episode(
         agent_kind="llm",
@@ -46,10 +56,8 @@ def test_figures_build():
     assert viz.comparison_figure(rows).data
 
 
-def test_app_runs_without_exception():
-    from streamlit.testing.v1 import AppTest
-
-    app = AppTest.from_file(APP, default_timeout=120)
+def test_app_runs_without_exception(streamlit_app_test):
+    app = streamlit_app_test.from_file(APP, default_timeout=120)
     app.run()
     assert not app.exception
     app.button[0].click().run()
