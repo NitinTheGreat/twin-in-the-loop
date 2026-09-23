@@ -1,0 +1,56 @@
+{
+ "fig1_net_sum_d": {
+  "text_artists": 29,
+  "legends": 1,
+  "size_in": [
+   7.16,
+   2.5
+  ],
+  "status": "pass"
+ },
+ "fig2_episode_difference": {
+  "text_artists": 21,
+  "legends": 1,
+  "size_in": [
+   3.5,
+   4.0
+  ],
+  "status": "pass"
+ },
+ "fig3_benefit_harm": {
+  "text_artists": 19,
+  "legends": 1,
+  "size_in": [
+   3.5,
+   2.3
+  ],
+  "status": "pass"
+ },
+ "fig4_false_positives": {
+  "text_artists": 21,
+  "legends": 1,
+  "size_in": [
+   3.5,
+   2.5
+  ],
+  "status": "pass"
+ },
+ "fig5_action_mix": {
+  "text_artists": 15,
+  "legends": 1,
+  "size_in": [
+   3.5,
+   2.4
+  ],
+  "status": "pass"
+ },
+ "fig6_llm_outcomes": {
+  "text_artists": 18,
+  "legends": 1,
+  "size_in": [
+   3.5,
+   2.9
+  ],
+  "status": "pass"
+ }
+}
