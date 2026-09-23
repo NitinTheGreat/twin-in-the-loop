@@ -146,7 +146,7 @@ pip install -r requirements.txt
 
 Default simulator, topology, fault, twin and agent parameters live in [`configs/base.yaml`](configs/base.yaml).
 
-API keys are only needed for LLM-driven runs. Copy the template and fill in the keys you use:
+Credentials are only needed for LLM-driven runs. Copy the template and fill in what you use:
 
 ```bash
 cp .env.example .env
@@ -155,8 +155,20 @@ cp .env.example .env
 | Variable | Used by |
 |---|---|
 | `LLM_API_KEY` | Generic OpenAI-compatible cloud provider (`--provider cloud`) |
-| `GEMINI_API_KEY` | Gemini provider (`--provider gemini`), dashboard and live server |
 | `OPENAI_API_KEY` | OpenAI preset (`--provider openai`) |
+| `GOOGLE_CLOUD_PROJECT` | Gemini on Vertex AI (`--provider gemini`), dashboard and live server |
+| `GOOGLE_CLOUD_LOCATION` | Vertex AI location for Gemini (defaults to `global`) |
+| `GOOGLE_GENAI_USE_VERTEXAI` | Tells the google-genai SDK to target Vertex AI (`true`) |
+
+Gemini runs on Google Cloud Vertex AI and authenticates with Application Default Credentials, not an API key. Set up ADC once per machine:
+
+```bash
+gcloud auth application-default login
+gcloud auth application-default set-quota-project orbit-507316
+gcloud config set project orbit-507316
+```
+
+The google-genai SDK discovers ADC automatically; do not put a credentials path or service-account key in `.env`.
 
 The scripts and dashboard load `.env` automatically. Never commit `.env`.
 
@@ -215,7 +227,7 @@ python scripts/run_experiments.py --provider local --model qwen2.5:7b-instruct
 **Cloud model.**
 
 ```bash
-# Gemini preset (reads GEMINI_API_KEY)
+# Gemini preset (Vertex AI via ADC; reads GOOGLE_CLOUD_PROJECT)
 python scripts/run_experiments.py --provider gemini --arms A0,A1,A2,A3,A4 --seeds 0,1
 
 # OpenAI preset (reads OPENAI_API_KEY)

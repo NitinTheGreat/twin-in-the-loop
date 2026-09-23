@@ -111,9 +111,9 @@ def provider_status(root=None):
             "note": "Replays the real recorded run from the response cache. Needs seed 0, 120 ticks, interval 10.",
         },
         "gemini": {
-            "available": bool(os.environ.get("GEMINI_API_KEY")),
+            "available": bool(os.environ.get("GOOGLE_CLOUD_PROJECT")),
             "label": "Gemini, live",
-            "note": "Calls the real API. Uses your GEMINI_API_KEY and costs money.",
+            "note": "Calls Vertex AI with Application Default Credentials (GOOGLE_CLOUD_PROJECT). Costs money.",
         },
         "local": {
             "available": True,
@@ -136,7 +136,7 @@ def _build_agent(kind, provider_name, cfg):
     elif provider_name == "gemini":
         cfg.llm.model = GEMINI_MODEL
         cache = ResponseCache(GEMINI_CACHE)
-        provider = GeminiProvider(os.environ.get("GEMINI_API_KEY"))
+        provider = GeminiProvider()
     elif provider_name == "local":
         cache = ResponseCache("results/live_local_cache/cache.json")
         provider = LocalProvider(cfg.llm)

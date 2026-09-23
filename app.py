@@ -79,8 +79,8 @@ def _sidebar():
             help="Scripted is a deterministic stand-in so you can explore instantly with no API. Gemini calls a real model.",
         )
         provider = "gemini" if provider_label.startswith("Gemini") else "scripted"
-        if provider == "gemini" and not os.environ.get("GEMINI_API_KEY"):
-            st.sidebar.warning("GEMINI_API_KEY not found in environment or .env")
+        if provider == "gemini" and not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+            st.sidebar.warning("GOOGLE_CLOUD_PROJECT not found in environment or .env")
 
     st.sidebar.subheader("4. Scenario")
     seed = st.sidebar.number_input("Seed (chooses the fault sequence)", min_value=0, max_value=9999, value=0, step=1)
