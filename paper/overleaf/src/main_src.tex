@@ -1,0 +1,360 @@
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,shapes.misc,calc}
+\usepackage[hidelinks]{hyperref}
+
+\graphicspath{{./}{figures/}}
+\renewcommand{\arraystretch}{1.12}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\setlength{\emergencystretch}{1.5em}
+\newcommand{\netSD}{net~$\Sigma D$}
+\newcommand{\NetSD}{Net~$\Sigma D$}
+
+\begin{document}
+
+\title{Measuring What a Digital-Twin Validation Gate Buys: Counterfactual Labelling of Every Proposal Across Twin Fidelity}
+
+\author{\IEEEauthorblockN{Nitin Kumar Pandey\textsuperscript{1}, Ayush Raj\textsuperscript{2}, Abhay Mahantesh Zalaki\textsuperscript{3},\\ Guneet Kaur Arora\textsuperscript{4}, Syamasudha Veeragandham\textsuperscript{5}}
+\IEEEauthorblockA{\textsuperscript{1,2,3,4,5}School of Computer Science and Engineering, Vellore Institute of Technology,\\
+Vellore, Tamil Nadu, India -- 632014\\
+Email: \textsuperscript{1}nitinkumar.pandey2023@vitstudent.ac.in, \textsuperscript{2}ayush.raj2023a@vitstudent.ac.in,\\
+\textsuperscript{3}abhay.mahantesh2023@vitstudent.ac.in, \textsuperscript{4}guneetkaur.arora2023@vitstudent.ac.in,\\
+\textsuperscript{5}syamsudha.v@vit.ac.in\\
+\textsuperscript{5}Corresponding author}}
+
+\maketitle
+
+\begin{abstract}
+Placing a digital twin between an autonomous controller and a live system, and applying only the actions the twin predicts to be acceptable, is an established safeguard. Its value is usually reported as improvement over an ungated controller, which cannot separate the twin's prediction from the effect of blocking. We present a controller-agnostic measurement method: every proposal, including rejected ones, receives a paired counterfactual label from the real simulator, and every twin-gated arm is compared with a reject-all gate that makes no prediction. We apply it to a deterministic edge-network simulator with a twin degraded along five fidelity axes, using \NSeeds{} paired seeds, \NFidelity{} fidelity levels, a rule-based and a scripted controller, and exact paired tests with Holm correction. Unvalidated action is harmful, and a low-fidelity twin is worse than no gate. The locally measured net benefit of the approved set crosses zero near fidelity \ScrCrossII{} for the scripted controller, and this crossing survives holding the twin's queueing model constant. At the episode level the twin beats reject-all only for the rule controller at fidelity 1.0 and 0.8, by about \RuleTenPctBaseline{} of baseline violations, carried by \RuleTenPctSeeds{} of seeds; the fidelity-1.0 result survives Bonferroni correction. The ceiling on any gate's gain is the benefit that reject-all discards, which is small for both controllers. Classifier quality is best read where the harm threshold equals the gate tolerance, which is not the best operating point. Local counterfactuals do not compose into episode effects. A \LLMSeeds-seed live-model study is reported descriptively only. Gate evaluations should report a reject-all control, per-seed distributions and the benefit actually available to the gate.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Digital twin, validation gate, counterfactual evaluation, twin fidelity, edge networks, autonomous remediation, LLM agents, reject-all control
+\end{IEEEkeywords}
+
+\section{Introduction}
+
+%%INTRO%%
+
+\textbf{Contributions.} Building on the twin-gate architecture of prior work~\cite{aether,processplant,twingatedorch}, the paper makes four contributions. (i) A controller-agnostic measurement method that labels every proposal, including rejected ones, with a paired counterfactual harm delta from the real system and scores every twin-gated arm against a reject-all gate on the same seeds. (ii) A characterisation of how the twin's value depends on fidelity along five controllable axes, including a control that holds the twin's queueing model constant. (iii) Results at \NSeeds{} paired seeds for two proposers, with a live-model study as one further, descriptive proposer. (iv) A methodological finding that local counterfactuals do not compose into episode effects, with its mechanism.
+
+\subsection{Research Objectives}
+
+\begin{enumerate}
+  \renewcommand{\labelenumi}{\textbf{RO\arabic{enumi}.}}
+  \item To define a controller-agnostic protocol that labels every proposal, including rejected ones, with a paired counterfactual harm delta and scores a twin gate against a reject-all control, both as a harm classifier and by closed-loop SLO violations.
+  \item To characterise how the value of the gate depends on twin fidelity along five controllable axes, and to test whether the observed fidelity crossover is attributable to fidelity rather than to a discrete change in the twin's queueing model.
+  \item To determine with exact paired statistics at \NSeeds{} seeds whether a twin gate improves episode outcomes beyond no-prediction controls, and to bound the gain any gate can achieve by the benefit reject-all discards.
+  \item To test whether local counterfactual metrics compose into episode-level effects, and to describe a live language-model proposer with the same instrument.
+\end{enumerate}
+
+\section{Related Work}
+
+%%RELATED%%
+
+\textbf{Twin-gated orchestration.} Recent infrastructure-orchestration work describes a digital twin as a mandatory validation gate between an optimisation agent and the execution layer, with failed candidates returned to the agent for re-optimisation~\cite{twingatedorch}. This is the gate-plus-retry loop we adopt; like the other twin-gate studies, it does not score rejected candidates against a counterfactual or compare with a reject-all gate.
+
+%%RELTABLE%%
+
+\subsection*{Gaps}
+
+\begin{enumerate}
+  \renewcommand{\labelenumi}{\textbf{G\arabic{enumi}.}}
+  \item Twin-gated validation is usually evaluated against an ungated agent, without a reject-all or random-gating control, so improvement cannot be attributed to prediction.
+  \item Twin fidelity is rarely varied along independent, controllable axes, and discrete changes in the twin's model are rarely separated from continuous degradation.
+  \item The consequences of rejected actions are seldom labelled, so gates are not scored as classifiers on the same examples on which episode outcomes are measured.
+  \item Headline improvements are seldom accompanied by per-seed distributions, exact tests, multiplicity correction, or the amount of benefit a gate could possibly preserve.
+\end{enumerate}
+
+\subsection*{Problem Statement}
+
+Given an autonomous controller that proposes repair actions for a faulty edge network and a digital-twin gate that approves or rejects each proposal, determine whether the gate's \emph{predictions} improve closed-loop SLO outcomes beyond what blocking alone achieves; quantify how this depends on twin fidelity and on the controller's candidate actions; and do so with labels for every proposal and statistics that are valid for small, zero-inflated paired samples.
+
+\section{Materials and Methods}
+
+\subsection{Dataset}
+
+No external dataset is used. All data are generated by the simulator and are reproducible from a seed. Each seed fixes the Poisson workload, the fault schedule (\FaultsPerEpisode{} faults per episode, start ticks \FaultStartMin--\FaultStartMax{}, durations \FaultDurMin--\FaultDurMax{} ticks, so some faults start after the \EpisodeTicks-tick episode ends), and all random streams. Every proposal record carries the controller, gate, tick, retry index, action, twin prediction, verdict, whether it was applied, and its counterfactual harm delta. Table~\ref{tab:dataset} summarises the corpus.
+
+\begin{table}[t]
+\centering
+\caption{Generated experimental corpus.}
+\label{tab:dataset}
+\footnotesize
+\begin{tabular}{@{}p{0.5\columnwidth}p{0.42\columnwidth}@{}}
+\toprule
+Item & Value \\
+\midrule
+Topology & 1 gateway, 4 edge servers, 12 IoT devices; 6 services \\
+Seeds (contiguous) & \NSeeds \\
+Fidelity levels & \NFidelity{} (0.0--1.0) \\
+Queueing conditions & 2 \\
+Arms per controller & 10 (plus null reference) \\
+Episodes in the fidelity sweep & \EpisodesTotal{} (\EpisodesPerCondition{} per condition) \\
+Twin@1.0 labelled candidates (rule / scripted) & \RuleTTCandidates{} / \ScrTTCandidates \\
+Live-model study & \LLMSeeds{} seeds $\times$ 4 arms \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Data split.} There is no training, so there is no train/test split. The design is paired: every arm runs on identical seeds, fault schedules and controller code, and only the gate differs. All \NSeeds{} seeds were fixed before any outcome was observed.
+
+%%METHODS_CORE%%
+
+\subsection{Counterfactual Labels}
+
+For every proposal, including rejected ones and retries, an offline labeller forks the \emph{real} simulator with the fault schedule visible. It rolls out two branches that share exogenous randomness~\cite{crn}: the action followed by \texttt{no\_op}, and \texttt{no\_op} throughout, each for $H=\Horizon$ ticks. The harm delta is
+\begin{equation}
+D(a) = V_H(a) - V_H(\texttt{no\_op}).
+\label{eq:delta}
+\end{equation}
+$D<0$ is beneficial, $D=0$ neutral and $D>0$ harmful. For classifier scoring, $a$ is labelled \emph{harmful} if $D(a)>\theta$ with $\theta=\HarmTheta$. The label is exact inside the simulator for the stated state, intervention, continuation policy and horizon; it is neither a physical-network ground truth nor the action's full closed-loop effect.
+
+\subsection{Evaluation Metrics}
+
+\textbf{Outcome.} The primary outcome is SLO violation-ticks per episode, $V=\sum_t\sum_k \mathbb{1}[\text{service } k \text{ non-compliant at } t]$; lower is better.
+
+\textbf{Classifier.} With harmful as the positive class, recall $=TP/(TP+FN)$ and $\mathrm{FPR}=FP/(FP+TN)$. A false positive with $\tau<D\le\theta$ is \emph{definitional}: the action causes real harm above the gate's tolerance but below the label threshold. On the $\tau=\theta$ diagonal this band is empty.
+
+\textbf{Benefit preserved and harm prevented.} Over the non-no-op candidates $\mathcal{C}$ of one arm, with approved set $\mathcal{A}$ and rejected set $\mathcal{R}$,
+\begin{equation}
+\begin{aligned}
+\mathrm{BP}&=\frac{\sum_{a\in\mathcal{A}}\max(-D(a),0)}{\sum_{a\in\mathcal{C}}\max(-D(a),0)},\\
+\mathrm{HP}&=\frac{\sum_{a\in\mathcal{R}}\max(D(a),0)}{\sum_{a\in\mathcal{C}}\max(D(a),0)}.
+\end{aligned}
+\label{eq:bphp}
+\end{equation}
+Reject-all has $\mathrm{BP}=0$ and $\mathrm{HP}=1$ by construction.
+
+\textbf{Net $\Sigma D$ (expected advantage).} Because reject-all is equivalent to applying \texttt{no\_op} at every decision, the local expected advantage of a gate on seed $s$ is
+\begin{equation}
+\widehat{\delta}_s=\sum_{a\in\mathcal{A}_s} D(a),
+\label{eq:expadv}
+\end{equation}
+whose mean over seeds we call \netSD{}; negative means the approved set is locally better than rejecting everything. It is compared with the observed paired difference $\delta_s=V_s^{\text{gate}}-V_s^{\text{reject-all}}$.
+
+\textbf{Statistical tests.} Paired differences are zero-inflated, so the primary test is the exact Wilcoxon signed-rank test~\cite{wilcoxon}, computed by dynamic programming with zero differences dropped. Holm correction~\cite{holm} is applied over the \HolmFamilySize{} comparisons per controller and condition. Paired $t$-intervals and seed-level percentile bootstrap intervals with \BootResamples{} resamples, sharing seeds across arms, are reported. With $m$ non-tied pairs the smallest attainable two-sided exact $p$-value is
+\begin{equation}
+p_{\min}(m)=2/2^{m}.
+\label{eq:pmin}
+\end{equation}
+Seeds required for 80\% power use $n=\left((z_{1-\alpha/2}+z_{0.8})\,\sigma/|\mu|\right)^2$. Crossing fidelities are found by linear interpolation between adjacent levels in each bootstrap resample.
+
+\subsection{Gates Compared}
+
+All gates run with identical seeds, faults and controller. \emph{Ungated} applies every valid proposal. \emph{Reject-all} blocks every non-no-op proposal and runs no simulation. \emph{Random} blocks at a probability matched to the twin's rejection rate ($p=\RandomGatePRule$ for rule, $\RandomGatePScr$ for scripted). \emph{Twin@$f$} applies Eq.~\eqref{eq:gate} at $f\in\{0.0,0.2,0.4,0.6,0.8,1.0\}$. The \emph{schedule-aware} gate applies the same rule on an exact fork that can see the fault schedule; it is not an upper bound on episode performance, because an $H$-tick evaluator can accept actions whose costs fall after $H$. \emph{A0} is the null controller.
+
+\subsection{Implementation, Hardware and Simulator Validation}
+
+The system is implemented in Python~3.11 with Pydantic schemas, LangGraph and a Google Gen AI client for Vertex AI. The testbed is entirely software: no physical IoT hardware or circuit is used, so no circuit diagram or hardware photograph applies. The simulator's queue reproduces the M/M/1 mean queue length $L_q=\rho^2/(1-\rho)$~\cite{kleinrock}: at $\rho=\MMRho$ ($L_q=\MMLq$) the measured mean over \MMMeasureTicks{} ticks lies within the test's \MMTolerance{} tolerance. This validates one load regime, not all network behaviour.
+
+\section{Experimental Results and Discussion}
+
+\subsection{Experimental Conditions}
+
+Table~\ref{tab:conditions} lists the fixed parameters. Two queueing conditions are run on the same seeds: (i) the queueing switch active as configured, and (ii) queueing simplification forced off at every fidelity. Condition (i) is primary unless stated.
+
+\begin{table}[t]
+\centering
+\caption{Experimental conditions.}
+\label{tab:conditions}
+\footnotesize
+\begin{tabular}{@{}p{0.52\columnwidth}p{0.4\columnwidth}@{}}
+\toprule
+Parameter & Value \\
+\midrule
+Episode length, decision interval & \EpisodeTicks{} ticks, every \DecisionInterval{} ticks \\
+Twin horizon $H$, tolerance $\tau$, threshold $\theta$ & \Horizon{} ticks, \GateTau, \HarmTheta{} violation-ticks \\
+Retry cap after rejection & \RetryCap{} (fallback \texttt{no\_op}) \\
+Faults per episode & \FaultsPerEpisode{} (start ticks \FaultStartMin--\FaultStartMax) \\
+Fidelity levels & 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 \\
+Queueing conditions & (i) switch active; (ii) held constant \\
+Seeds & \NSeeds, paired across all arms \\
+Statistics & exact Wilcoxon, Holm (\HolmFamilySize{} per controller), $t$-CI, bootstrap (\BootResamples) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Functional Test Cases and Fault-Handling Mechanism}
+
+Table~\ref{tab:tests} summarises verification of the testbed. The regression suite (\TestsPassed{} tests) passes with warnings treated as errors, and all \MutationsKilled{} deliberate mutations of critical code paths are detected.
+
+%%TESTTABLE%%
+
+\textbf{Fault-handling mechanism.} Faults are handled in four layers. Detection is symptomatic: the collector and summariser expose SLO state, utilisation, memory and at-risk flags, never the fault type. Proposals then pass schema and semantic validation, which block malformed, infeasible and conflicting actions before any state is touched. The twin gate rejects actions predicted to worsen violations relative to holding and returns the reason to the controller. When retries are exhausted the system holds with \texttt{no\_op} rather than forcing the action, so the worst case of the gate is inaction.
+
+\subsection{Performance Comparison of Gates}
+
+Table~\ref{tab:gates} compares every gate at fidelity 1.0, and Table~\ref{tab:episode} gives the paired episode differences against reject-all. Reject-all equals A0 on every seed for both controllers: a rejected proposal is retried and ends as a no-op, so reject-all \emph{is} inaction.
+
+\begin{table*}[t]
+\centering
+\caption{Performance comparison of gates, condition (i), $n=\NSeeds$ seeds. Episode mean in violation-ticks per \EpisodeTicks-tick episode (lower is better); BP and HP as in Eq.~\eqref{eq:bphp}; \netSD{} per seed with 95\% bootstrap interval.}
+\label{tab:gates}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrlrrrl@{}}
+\toprule
+& \multicolumn{4}{c}{Rule controller} & \multicolumn{4}{c}{Scripted controller} \\
+\cmidrule(lr){2-5}\cmidrule(lr){6-9}
+Gate & Episode mean & BP & HP & \netSD{} & Episode mean & BP & HP & \netSD{} \\
+\midrule
+%%GATEROWS%%
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\caption{Episode-level paired differences, twin $-$ reject-all, violation-ticks per episode, $n=\NSeeds$, condition (i).}
+\label{tab:episode}
+\footnotesize
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}llrcrcl@{}}
+\toprule
+Controller & Arm & Mean & 95\% $t$-CI & Exact Wilcoxon $p$ & Holm $p$ & Seeds $\neq 0$ (better/worse) \\
+\midrule
+%%EPROWS%%
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\subsection{Unvalidated Action Is Harmful}
+For the scripted controller, ungated operation is worse than reject-all by \ScrUngatedEpI{} violation-ticks per episode, 95\% CI \ScrUngatedEpCII, worse on \ScrUngatedEpWorseI{} of \NSeeds{} seeds (Holm $p=\ScrUngatedEpHolmI$). For the rule controller the ungated penalty is \RuleUngatedEpI{} \RuleUngatedEpCII{} (Holm $p=\RuleUngatedEpHolmI$). Acting without validation costs more than not acting.
+
+\subsection{A Low-Fidelity Twin Is Worse Than No Gate}
+The scripted controller gated by twin@0.0 is worse than reject-all by \ScrEpZeroI{} \ScrEpCIZeroI{} (Holm $p=\ScrEpHolmZeroI$; \ScrEpWorseZeroI{} seeds worse, \ScrEpBetterZeroI{} better). With queueing held constant the penalty is \ScrEpZeroII{} \ScrEpCIZeroII. Every scripted twin level up to 0.8 is significantly worse than reject-all after Holm correction (Fig.~\ref{fig:episode}). A poor twin approves harmful actions that reject-all would have blocked.
+
+\subsection{The Fidelity Crossover in \texorpdfstring{\netSD{}}{net Sigma D}}
+\begin{figure*}[t]
+\centering
+\includegraphics[width=\textwidth]{fig1_net_sum_d}
+\caption{\NetSD{} per seed over approved candidates against twin fidelity, $n=\NSeeds$ seeds. Shaded bands are 95\% seed-bootstrap intervals; solid circles: queueing switch active; dashed squares: queueing held constant. Negative values mean the approved set is locally better than reject-all. Scripted crossing: \ScrCrossI{} \ScrCrossCII{} (switch active), \ScrCrossII{} \ScrCrossCIII{} (held constant).}
+\label{fig:netsd}
+\end{figure*}
+For the scripted controller, \netSD{} falls monotonically from \ScrNetZeroI{} at $f=0$ to \ScrNetTenI{} at $f=1$ and crosses zero at \ScrCrossI{} \ScrCrossCII{} (Fig.~\ref{fig:netsd}). The crossing lies between $f=0.4$ and $f=0.6$, exactly where the queueing switch flips, so as first observed it could not be attributed to fidelity. It became attributable only after the control that holds the queueing model constant: the crossing then sits at \ScrCrossII{} \ScrCrossCIII{}, monotone, with \ScrCrossSingleII{} of \BootResamples{} resamples showing exactly one crossing. The 0.4$\rightarrow$0.6 step in the held-constant condition is \ScrStepFourSixII{} \ScrStepFourSixCIII, while the switch itself is worth only \ScrSwitchFour{} \ScrSwitchFourCI{} per seed at $f=0.4$ ($p=\ScrSwitchFourP$). The rule controller's \netSD{} is at or below zero at every level in both conditions (\RuleNetZeroI{} to \RuleNetTenI), with no crossing; held constant, its curve is flat between 0.4 and 0.6 (\RuleStepFourSixII{} \RuleStepFourSixCIII) and is not fitted through.
+
+\subsection{Episode-Level Benefit for the Rule Controller}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig2_episode_difference}
+\caption{Episode-level difference, twin $-$ reject-all, by fidelity (condition (i), $n=\NSeeds$). Bars are 95\% $t$-intervals; filled markers: Holm $p<0.05$; open markers: not significant. Negative means the twin gate is better.}
+\label{fig:episode}
+\end{figure}
+Only for the rule controller does the twin beat reject-all at the episode level: by \RuleEpTenI{} \RuleEpCITenI{} at fidelity 1.0 (exact Wilcoxon $p=\RuleEpPTenI$, Holm $p=\RuleEpHolmTenI$) and \RuleEpEightI{} \RuleEpCIEightI{} at 0.8 (Holm $p=\RuleEpHolmEightI$), identically in both queueing conditions. The effect is small: about \RuleTenPctBaseline{} of the \RuleRejEpMeanI-tick reject-all baseline. It is concentrated in \RuleEpNZTenI{} of \NSeeds{} seeds (\RuleTenPctSeeds), and \RuleEpWorseTenI{} of those seeds went the wrong way (\RuleEpBetterTenI{} better). The fidelity-1.0 result survives Bonferroni correction across the \BonfFamily{} unique comparisons of both controllers and both conditions (adjusted $p=\BonfRuleTen$); the fidelity-0.8 result does not (adjusted $p=\BonfRuleEight$). An earlier 10-seed estimate for this comparison overstated the effect and is superseded by the \NSeeds-seed values reported here. For the scripted controller, twin@1.0 is not distinguishable from reject-all (\ScrEpTenI{} \ScrEpCITenI, $p=\ScrEpPTenI$, observed power \ScrEpPowerTenI).
+
+\subsection{Classifier Quality}
+\begin{table}[t]
+\centering
+\caption{Twin@1.0 as a classifier of harmful actions ($D>\theta$). Scripted: \ScrTTCandidates{} candidates (\ScrTTBeneficial{} beneficial); rule: \RuleTTCandidates{} (\RuleTTBeneficial{} beneficial). False positives split into definitional ($\tau<D\le\theta$) and predictive.}
+\label{tab:classifier}
+\footnotesize
+\setlength{\tabcolsep}{2.5pt}
+\begin{tabular}{@{}lcrrrrr@{}}
+\toprule
+Ctrl. & ($\tau,\theta$) & Recall & FPR & Neg. & FP def. & FP pred. \\
+\midrule
+Scr. & (0,3) & \ScrTTZeroThreeRecall & \ScrTTZeroThreeFPR & \ScrTTZeroThreeNeg & \ScrTTZeroThreeFPDef & \ScrTTZeroThreeFPPred \\
+Scr. & (1,1) & \ScrTTOneOneRecall & \ScrTTOneOneFPR & \ScrTTOneOneNeg & \ScrTTOneOneFPDef & \ScrTTOneOneFPPred \\
+Scr. & (3,3) & \ScrTTThreeThreeRecall & \ScrTTThreeThreeFPR & \ScrTTThreeThreeNeg & \ScrTTThreeThreeFPDef & \ScrTTThreeThreeFPPred \\
+Rule & (0,3) & \RuleTTZeroThreeRecall & \RuleTTZeroThreeFPR & \RuleTTZeroThreeNeg & \RuleTTZeroThreeFPDef & \RuleTTZeroThreeFPPred \\
+Rule & (1,1) & \RuleTTOneOneRecall & \RuleTTOneOneFPR & \RuleTTOneOneNeg & \RuleTTOneOneFPDef & \RuleTTOneOneFPPred \\
+Rule & (3,3) & \RuleTTThreeThreeRecall & \RuleTTThreeThreeFPR & \RuleTTThreeThreeNeg & \RuleTTThreeThreeFPDef & \RuleTTThreeThreeFPPred \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig4_false_positives}
+\caption{False positives of the scripted controller's twin@1.0 across ($\tau,\theta$) cells, split into definitional ($\tau<D\le\theta$) and predictive. The definitional band is empty on the $\tau=\theta$ diagonal (marked *).}
+\label{fig:fp}
+\end{figure}
+\textbf{(a) Reading the classifier on the $\tau=\theta$ diagonal.} At the operating setting $\tau=\GateTau$, $\theta=\HarmTheta$, the scripted twin@1.0 has FPR \ScrTTZeroThreeFPR{} \ScrTTZeroThreeFPRCI{}, but \ScrTTZeroThreeFPDef{} of its \ScrTTZeroThreeFP{} false positives (\ScrTTZeroThreeDefShare) are definitional: actions with $0<D\le\HarmTheta$ that cause real harm below $\theta$. On the diagonal that band is empty by construction, so every false positive is a genuine prediction error. At $\tau=\theta=3$ recall is \ScrTTThreeThreeRecall{} and FPR is \ScrTTThreeThreeFPR{} \ScrTTThreeThreeFPRCI{} (Table~\ref{tab:classifier}, Fig.~\ref{fig:fp}); the rule twin gives FPR \RuleTTOneOneFPR--\RuleTTThreeThreeFPR{} with recall \RuleTTOneOneRecall--\RuleTTThreeThreeRecall. These rates rest on few negatives (\ScrTTThreeThreeNeg{} scripted, \RuleTTThreeThreeNeg{} rule) and, for the rule controller, on \RuleTTCandidates{} candidates in total; they describe a good filter on these candidates, not a general classifier.
+
+\textbf{(b) The operating point.} The diagonal is where the classifier is read, not where the gate should run. At $\tau=3$ the scripted gate's \netSD{} turns positive, \ScrTTThreeThreeNet{} \ScrTTThreeThreeNetCI{}, against \ScrTTZeroThreeNet{} \ScrTTZeroThreeNetCI{} at $\tau=0$, because a tolerance of 3 admits harmful scale-ups. The $\tau>0$ rows relabel a fixed corpus of decisions taken at $\tau=0$; they do not simulate a system running at $\tau>0$.
+
+\subsection{The Benefit Ceiling}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig3_benefit_harm}
+\caption{Benefit preserved and harm prevented against twin fidelity (condition (i), $n=\NSeeds$), with 95\% seed-bootstrap intervals.}
+\label{fig:bphp}
+\end{figure}
+A gate cannot beat reject-all by more than the benefit reject-all discards. On the reject-all trajectory that benefit is \RuleRejAvailBenefitI{} violation-ticks (\RuleRejAvailBenefitPerSeedI{} per seed) in \RuleRejSeedsBenefitI{} of \NSeeds{} seeds for the rule controller, and \ScrRejAvailBenefitI{} ticks (\ScrRejAvailBenefitPerSeedI{} per seed) in \ScrRejSeedsBenefitI{} seeds for the scripted controller, whose reject-all trajectory holds \ScrRejBeneficialI{} beneficial against \ScrRejHarmfulAboveThreeI{} harmful scale-ups. Seeds with a beneficial candidate in any arm number \RuleAnyArmSeedsBenefitI{} (rule) and \ScrAnyArmSeedsBenefitI{} (scripted), but most of that benefit exists only on trajectories that earlier actions created. Harm prevented rises with fidelity for both controllers; benefit preserved for the rule controller is flat up to 0.6 and rises only at 0.8--1.0 (Fig.~\ref{fig:bphp}). The scripted null at fidelity 1.0 is therefore structural.
+
+\subsection{Live-Model Descriptive Study}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig5_action_mix}
+\caption{Action-type mix of non-no-op proposals on the ungated arm: live model (\LLMSeeds{} seeds), rule and scripted controllers (\NSeeds{} seeds).}
+\label{fig:mix}
+\end{figure}
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{fig6_llm_outcomes}
+\caption{Live-model first-attempt outcome at each scheduled decision, by arm (\LLMSeeds{} seeds, \LLMUngatedFirstN{} first attempts per arm).}
+\label{fig:outcomes}
+\end{figure}
+A hosted model (\LLMModel, temperature \LLMTemperature, one prompt) was run as a proposer on \LLMSeeds{} seeds with ungated, reject-all, twin@1.0 and twin@0.6 arms. This study is descriptive. Valid non-no-op first proposals occurred at \LLMProducedMin--\LLMProducedMax{} of scheduled decisions, and final parse failures at \LLMParseMin--\LLMParseMax{}, each resolved to an explicit no-op fallback (Fig.~\ref{fig:outcomes}). The model's action mix differs from both baselines: on the ungated arm \LLMUngatedMixScale{} scale, \LLMUngatedMixRestart{} restart and \LLMUngatedMixMigrate{} migrate, against \RuleUngatedMixScale{} scale for the rule controller and \ScrUngatedMixScale{} for the scripted one (Fig.~\ref{fig:mix}). Recoverable benefit on the reject-all trajectory is \LLMRejectAvailBenefit{} ticks, \LLMRejectAvailBenefitPerSeed{} per seed in \LLMRejectSeedsBenefit{} of \LLMSeeds{} seeds, larger per seed than for either baseline. The paired twin@1.0 $-$ reject-all difference, \LLMTwinTenMean{} \LLMTwinTenCI{} (exact Wilcoxon $p=\LLMTwinTenP$, Holm $p=\LLMTwinTenHolm$, observed power \LLMTwinTenPower), is an underpowered pilot statistic; no episode-level effect is claimed.
+
+\subsection{Expected Versus Actual: Local Counterfactuals Do Not Compose}
+\begin{table}[t]
+\centering
+\caption{Expected advantage (\netSD{}, Eq.~\eqref{eq:expadv}) versus actual episode difference against reject-all, per seed, condition (i), $n=\NSeeds$.}
+\label{tab:expected}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lrrrr@{}}
+\toprule
+& \multicolumn{2}{c}{Rule} & \multicolumn{2}{c}{Scripted} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+Fidelity & Expected & Actual & Expected & Actual \\
+\midrule
+%%EXPROWS%%
+\bottomrule
+\end{tabular}
+\end{table}
+\NetSD{} is a sum of \Horizon-tick counterfactuals with a no-op continuation, and it does not add up to closed-loop episode effects (Table~\ref{tab:expected}). For the scripted controller at fidelity 1.0, \netSD{} is \ScrNetTenI{} per seed, predicting a twin advantage, while the episode difference is \ScrEpTenI: the sign is wrong. The scripted \netSD{} crossing near \ScrCrossI{} has no episode-level counterpart; the episode curve approaches zero from above and never crosses. The mechanism is visible in single seeds of the earlier \SignAblationSeeds-seed ablation runs, cited as worked examples and not as effect estimates: on seed \SignSeed, approved scale-ups summed to \SignPredicted{} locally, but the episode ended \SignObserved{} ticks worse than reject-all, because approved scale-ups alter later states that the no-op continuation does not represent. For the rule controller the sign is right but migrations are underestimated: on seed \MigImmuneSeed{} of the gateway-exposed ablation the observed episode effect was \MigImmuneRatio{}$\times$ the local sum with the gateway immune (\MigImmunePredicted{} predicted, \MigImmuneObserved{} observed) and \MigFaultableRatio{}$\times$ with the gateway faultable (\MigFaultablePredicted{} predicted, \MigFaultableObserved{} observed), because a migration's downtime is paid inside the horizon while its benefit accrues for the rest of the fault. Local metrics describe the filter; performance claims need episode outcomes.
+
+\section{Limitations and Future Work}
+\label{sec:limits}
+
+\textbf{Shared simulator code.} The twin and the labeller are forks of the same simulator, so model-structure error is represented only through the five degradation axes; fidelity 1.0 is a harness sanity check, not an attainable twin.
+
+\textbf{Relabelled corpus.} The $\tau>0$ rows of the classifier analysis relabel decisions taken at $\tau=0$; they are not simulations of a gate running at $\tau>0$.
+
+\textbf{Shared response cache in the live study.} One response cache served all arms of the live-model study, so arms reuse identical responses for identical prompts, and which arm first queries the model depends on execution order.
+
+\textbf{Synthetic-only evaluation.} All results come from a synthetic simulator with a gateway that is immune to node faults in the primary protocol. No numerical comparison with systems evaluated on realistic replicas, such as Aether~\cite{aether}, is meaningful.
+
+\textbf{Incomplete cost accounting.} The historical live study retained input and visible-output tokens but not thinking tokens or failed-request usage; its rate-card figure (\$\LLMRateCardCost{} for \LLMBilledCalls{} billed calls) is not an invoice.
+
+\textbf{Future work.} The live-model evidence is a single model, prompt and cache realisation at \LLMSeeds{} seeds. The normal-approximation requirement computed from the \LLMSeeds-seed data is $n=\LLMTwinTenNeed$ seeds for 80\% power on the twin@1.0 $-$ reject-all comparison, and a \LLMTwinTenNeed-seed live-model confirmation run is scheduled. A workload with more restart and migration opportunities per episode would raise the benefit ceiling more efficiently than more seeds, and fault-arrival uncertainty could be modelled with legitimately available information such as disturbance ensembles~\cite{robustmps,pomcp}.
+
+\section{Conclusion}
+Comparing a twin gate with reject-all on counterfactually labelled proposals separates what the twin predicts from what it blocks. On \NSeeds{} seeds the twin's value depends strongly on fidelity: low fidelity is worse than no gate, and the net local benefit crosses zero near \ScrCrossII{} once the queueing model is held constant. The episode-level gain is real for one controller, small, concentrated in a few seeds and bounded by the benefit reject-all discards. Classifier quality should be read on the $\tau=\theta$ diagonal, and local counterfactual metrics describe the filter but do not compose into episode effects.
+
+\section*{Funding Statement}
+The authors declare that no funding, grants, or external support were received during the development of this work.
+
+\section*{Declaration of Competing Interest}
+The authors declare that they have no known competing financial interests or personal relationships that could have appeared to influence the work reported in this paper.
+
+\section*{Data Availability}
+All data are generated by the simulator and are reproducible from the seeds reported here. The source code, experiment scripts and machine-readable results (\texttt{docs/research/extended\_fidelity\_sweep.json} and \texttt{docs/research/llm\_descriptive\_study.json}) are available at \url{https://github.com/NitinTheGreat/twin-in-the-loop}.
+
+%%BIBLIOGRAPHY%%
+
+\end{document}

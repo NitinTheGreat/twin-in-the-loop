@@ -1,0 +1,6 @@
+{
+ "command": "pytest -W error -q -W error",
+ "passed": 393,
+ "failed": 0,
+ "date": "2026-09-23"
+}
